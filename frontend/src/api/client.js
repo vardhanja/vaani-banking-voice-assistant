@@ -1,30 +1,23 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
-const extractErrorMessage = (payload, fallback) => {
-  if (!payload) return fallback;
-  if (typeof payload === "string") return payload;
-  const detail = payload.detail;
-  if (typeof payload.message === "string") return payload.message;
-  if (detail) {
-    if (Array.isArray(detail) && detail.length > 0) {
-      return detail[0]?.msg || fallback;
-    }
-    if (typeof detail === "string") {
-      return detail;
-    }
-    if (typeof detail === "object") {
-      if (typeof detail.error?.message === "string") {
-        return detail.error.message;
-      }
-      if (typeof detail.message === "string") {
-        return detail.message;
-      }
-    }
+const extractErrorInfo = (payload, fallback) => {
+  if (!payload) {
+    return { message: fallback, code: null };
   }
-  if (typeof payload.error?.message === "string") {
-    return payload.error.message;
-  }
-  return fallback;
+
+  const detail = payload?.detail;
+  const errorNode = detail?.error ?? payload?.error;
+  const messageSources = [
+    errorNode?.message,
+    payload?.message,
+    typeof detail === "string" ? detail : null,
+    Array.isArray(detail) && detail.length > 0 ? detail[0]?.msg : null,
+    typeof payload === "string" ? payload : null,
+  ].filter(Boolean);
+
+  const message = messageSources[0] ?? fallback;
+  const code = errorNode?.code ?? detail?.code ?? payload?.code ?? null;
+  return { message, code };
 };
 
 export async function authenticateUser({ userId, password }) {
@@ -39,8 +32,8 @@ export async function authenticateUser({ userId, password }) {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    const message = extractErrorMessage(payload, "Unable to sign in.");
-    return { success: false, message };
+    const { message, code } = extractErrorInfo(payload, "Unable to sign in.");
+    return { success: false, message, code };
   }
 
   const data = payload?.data;
@@ -67,8 +60,10 @@ export async function fetchAccounts({ accessToken }) {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    const message = extractErrorMessage(payload, "Unable to fetch accounts.");
-    throw new Error(message);
+    const { message, code } = extractErrorInfo(payload, "Unable to fetch accounts.");
+    const error = new Error(message);
+    if (code) error.code = code;
+    throw error;
   }
 
   return payload?.data ?? [];
@@ -92,8 +87,10 @@ export async function fetchTransactions({ accessToken, accountId, from, to, limi
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = extractErrorMessage(payload, "Unable to fetch transactions.");
-    throw new Error(message);
+    const { message, code } = extractErrorInfo(payload, "Unable to fetch transactions.");
+    const error = new Error(message);
+    if (code) error.code = code;
+    throw error;
   }
   return payload?.data ?? [];
 }
@@ -118,8 +115,10 @@ export async function fetchAccountBalance({ accessToken, accountId }) {
   }
 
   if (!response.ok) {
-    const message = extractErrorMessage(payload, "Unable to fetch balance.");
-    throw new Error(message);
+    const { message, code } = extractErrorInfo(payload, "Unable to fetch balance.");
+    const error = new Error(message);
+    if (code) error.code = code;
+    throw error;
   }
   return payload?.data ?? null;
 }
@@ -147,8 +146,10 @@ export async function createInternalTransfer({ accessToken, payload }) {
   }
 
   if (!response.ok) {
-    const message = extractErrorMessage(json, "Transfer failed.");
-    throw new Error(message);
+    const { message, code } = extractErrorInfo(json, "Transfer failed.");
+    const error = new Error(message);
+    if (code) error.code = code;
+    throw error;
   }
   return json?.data ?? null;
 }
@@ -173,8 +174,10 @@ export async function fetchReminders({ accessToken }) {
   }
 
   if (!response.ok) {
-    const message = extractErrorMessage(payload, "Unable to load reminders.");
-    throw new Error(message);
+    const { message, code } = extractErrorInfo(payload, "Unable to load reminders.");
+    const error = new Error(message);
+    if (code) error.code = code;
+    throw error;
   }
   return payload?.data ?? [];
 }
@@ -202,8 +205,10 @@ export async function createReminder({ accessToken, payload }) {
   }
 
   if (!response.ok) {
-    const message = extractErrorMessage(json, "Unable to create reminder.");
-    throw new Error(message);
+    const { message, code } = extractErrorInfo(json, "Unable to create reminder.");
+    const error = new Error(message);
+    if (code) error.code = code;
+    throw error;
   }
   return json?.data ?? null;
 }
@@ -231,8 +236,10 @@ export async function updateReminderStatus({ accessToken, reminderId, status }) 
   }
 
   if (!response.ok) {
-    const message = extractErrorMessage(json, "Unable to update reminder.");
-    throw new Error(message);
+    const { message, code } = extractErrorInfo(json, "Unable to update reminder.");
+    const error = new Error(message);
+    if (code) error.code = code;
+    throw error;
   }
   return json?.data ?? null;
 }

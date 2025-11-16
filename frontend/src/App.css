@@ -249,7 +249,7 @@
 
 .profile-surface {
   gap: 2.5rem;
-}
+  }
 
 .profile-hero {
   display: flex;
@@ -431,7 +431,7 @@
   text-transform: uppercase;
   font-size: 0.75rem;
   letter-spacing: 1px;
-}
+  }
 
 .card-status--active {
   color: #157347;
@@ -538,4 +538,20 @@
   .profile-card--span {
     grid-column: span 1;
   }
+}
+
+.statement-controls {
+  margin-top: 1.75rem;
+  display: grid;
+  gap: var(--space-md);
+}
+
+.statement-controls h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.statement-controls .form-grid {
+  margin-top: 0.25rem;
 }

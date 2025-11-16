@@ -107,9 +107,9 @@ class BankingService:
         channel: TransactionChannel = TransactionChannel.VOICE,
         session_id: Optional[str] = None,
         reference_id: Optional[str] = None,
-    ) -> TransferResult:
+    ) -> dict:
         with session_scope(self._session_factory) as session:
-            return execute_internal_transfer(
+            result = execute_internal_transfer(
                 session,
                 source_account_number=source_account_number,
                 destination_account_number=destination_account_number,
@@ -120,6 +120,25 @@ class BankingService:
                 initiated_session_id=session_id,
                 reference_id=reference_id,
             )
+            session.flush()
+
+            debit_txn = result.debit_transaction
+            credit_txn = result.credit_transaction
+
+            return {
+                "debit": {
+                    "id": str(debit_txn.id),
+                    "amount": debit_txn.amount,
+                    "currency": debit_txn.currency_code,
+                    "description": debit_txn.description,
+                },
+                "credit": {
+                    "id": str(credit_txn.id),
+                    "amount": credit_txn.amount,
+                    "currency": credit_txn.currency_code,
+                    "description": credit_txn.description,
+                },
+            }
 
     def fetch_transaction_history(
         self,

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 from typing import Iterable, Optional
 
@@ -69,7 +70,7 @@ def execute_internal_transfer(
     destination_account.balance += amount_decimal
     destination_account.available_balance += amount_decimal
 
-    occurrence_time = datetime.now(timezone.utc)
+    occurrence_time = datetime.now(ZoneInfo("Asia/Kolkata"))
 
     debit_txn = Transaction(
         account_id=source_account.id,

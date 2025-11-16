@@ -59,9 +59,10 @@ def raise_http_error(
 ) -> None:
     meta = build_meta(ctx)
     detail = ErrorDetail(code=code, message=message)
+    payload = ErrorResponse(meta=meta, error=detail).model_dump(mode="json")
     raise HTTPException(
         status_code=status_code,
-        detail=ErrorResponse(meta=meta, error=detail).model_dump(),
+        detail=payload,
     )
 
 
@@ -233,30 +234,50 @@ def create_internal_transfer(
         )
 
     try:
-        transfer_result = banking_service.transfer_between_accounts(
+        destination_account_number = payload.destinationAccountNumber.strip()
+        if not destination_account_number:
+            raise_http_error(
+                ctx,
+                message="Provide a valid destination account number.",
+                code="invalid_destination_account",
+            )
+        if destination_account_number == source_account["accountNumber"]:
+            raise_http_error(
+                ctx,
+                message="Destination account must be different from the source account.",
+                code="invalid_destination_account",
+            )
+
+        result = banking_service.transfer_between_accounts(
             source_account_number=source_account["accountNumber"],
-            destination_account_number=payload.destinationAccountNumber,
+            destination_account_number=destination_account_number,
             amount=Decimal(payload.amount),
             currency_code=payload.currency,
             description=payload.remarks,
             channel=TransactionChannel.VOICE,
-            session_id=session.access_token,
+            session_id=session.session_id,
             reference_id=payload.referenceId,
         )
     except ValueError as exc:
+        message = str(exc)
+        error_code = "transfer_failed"
+        status_code_value = status.HTTP_400_BAD_REQUEST
+        if "Insufficient funds" in message:
+            error_code = "insufficient_funds"
+            message = "Insufficient funds in source account."
         raise_http_error(
             ctx,
-            message=str(exc),
-            code="transfer_failed",
-            status_code=status.HTTP_400_BAD_REQUEST,
+            message=message,
+            code=error_code,
+            status_code=status_code_value,
         )
 
     receipt = TransferReceipt(
-        debitTransactionId=str(transfer_result.debit_transaction.id),
-        creditTransactionId=str(transfer_result.credit_transaction.id),
-        amount=transfer_result.debit_transaction.amount,
-        currency=transfer_result.debit_transaction.currency_code,
-        description=transfer_result.debit_transaction.description,
+        debitTransactionId=result["debit"]["id"],
+        creditTransactionId=result["credit"]["id"],
+        amount=result["debit"]["amount"],
+        currency=result["debit"]["currency"],
+        description=result["debit"]["description"],
     )
     meta = build_meta(ctx)
     return TransferResponse(meta=meta, data=receipt)
