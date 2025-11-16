@@ -21,6 +21,13 @@ from .reminders import (
     list_reminders_for_user,
     mark_reminder_status,
 )
+from .device_bindings import (
+    create_device_binding,
+    list_device_bindings,
+    get_device_binding_by_id,
+    get_device_binding_for_device,
+    mark_device_binding_trust,
+)
 
 __all__ = [
     "get_account_balance",
@@ -36,6 +43,11 @@ __all__ = [
     "fetch_due_reminders",
     "list_reminders_for_user",
     "mark_reminder_status",
+    "create_device_binding",
+    "list_device_bindings",
+    "get_device_binding_by_id",
+    "get_device_binding_for_device",
+    "mark_device_binding_trust",
 ]
 
 

@@ -9,7 +9,7 @@ PostgreSQL).
 
 from .config import DatabaseConfig, load_database_config
 from .engine import create_db_engine, get_session_factory
-from .services import AuthService, BankingService
+from .services import AuthService, BankingService, DeviceBindingService, VoiceVerificationService
 
 __all__ = [
     "DatabaseConfig",
@@ -18,6 +18,8 @@ __all__ = [
     "get_session_factory",
     "AuthService",
     "BankingService",
+    "DeviceBindingService",
+    "VoiceVerificationService",
 ]
 
 

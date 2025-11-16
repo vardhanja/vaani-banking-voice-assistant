@@ -6,12 +6,21 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import hashlib
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status, File, UploadFile, Form
 
 from ..db.services.auth import AuthService
 from ..db.services.banking import BankingService
+from ..db.services.device_binding import DeviceBindingService
+from ..db.services.voice_verification import VoiceVerificationService
 from ..db.utils.enums import ReminderStatus, ReminderType, TransactionChannel
-from .dependencies import AuthServiceDep, BankingServiceDep
+from .dependencies import (
+    AuthServiceDep,
+    BankingServiceDep,
+    DeviceBindingServiceDep,
+    VoiceVerificationServiceDep,
+)
 from .schemas import (
     AccountBalanceData,
     AccountBalanceResponse,
@@ -20,8 +29,10 @@ from .schemas import (
     ErrorDetail,
     ErrorResponse,
     LoginData,
-    LoginRequest,
     LoginResponse,
+    DeviceBindingListResponse,
+    DeviceBindingResponse,
+    DeviceBindingResource,
     ReminderCreateRequest,
     ReminderListResponse,
     ReminderResource,
@@ -56,9 +67,10 @@ def raise_http_error(
     *,
     code: str,
     status_code: int = status.HTTP_400_BAD_REQUEST,
+    info: Optional[dict] = None,
 ) -> None:
     meta = build_meta(ctx)
-    detail = ErrorDetail(code=code, message=message)
+    detail = ErrorDetail(code=code, message=message, info=info)
     payload = ErrorResponse(meta=meta, error=detail).model_dump(mode="json")
     raise HTTPException(
         status_code=status_code,
@@ -89,22 +101,50 @@ def serialize_reminder(reminder) -> ReminderResource:
     summary="Authenticate user credentials",
     tags=["Authentication"],
 )
-def login_v1(
-    payload: LoginRequest,
+async def login_v1(
+    userId: str = Form(...),
+    password: str = Form(...),
+    deviceIdentifier: Optional[str] = Form(None),
+    deviceFingerprint: Optional[str] = Form(None),
+    deviceLabel: Optional[str] = Form(None),
+    platform: Optional[str] = Form(None),
+    registrationMethod: Optional[str] = Form("otp+voice"),
+    voiceSample: UploadFile | None = File(None),
+    voiceBypass: bool = Form(False),
     ctx: RequestContext = RequestContextDep,
     auth_service: AuthService = AuthServiceDep,
 ):
+    voice_bytes = await voiceSample.read() if voiceSample else None
     result = auth_service.authenticate(
-        customer_number=payload.userId,
-        password=payload.password,
+        customer_number=userId,
+        password=password,
+        device_identifier=deviceIdentifier,
+        fingerprint_hash=deviceFingerprint,
+        platform=platform,
+        device_label=deviceLabel,
+        voice_sample=voice_bytes,
+        registration_method=registrationMethod or "otp+voice",
+        voice_bypass=voiceBypass,
     )
 
     if not result.success or result.user_profile is None or result.access_token is None:
+        reason = result.reason or "invalid_credentials"
+        message_map = {
+            "invalid_credentials": "Invalid user ID or password.",
+            "device_binding_required": "Device binding required before continuing.",
+            "device_verification_required": "Verify this device to continue.",
+            "voice_verification_required": "Please complete voice verification to continue.",
+            "voice_enrollment_required": "Please enroll your voice signature to continue.",
+            "voice_mismatch": "Voice sample did not match our records.",
+            "voice_sample_invalid": "Voice sample was too short or unclear. Please record again.",
+        }
+        message = message_map.get(reason, "Authentication failed.")
         raise_http_error(
             ctx,
-            message="Invalid user ID or password.",
-            code="invalid_credentials",
+            message=message,
+            code=reason,
             status_code=status.HTTP_401_UNAUTHORIZED,
+            info=result.detail,
         )
 
     profile = UserProfile(**result.user_profile)
@@ -113,8 +153,103 @@ def login_v1(
         accessToken=result.access_token,
         expiresIn=result.expires_in or 0,
         profile=profile,
+        detail=result.detail,
     )
     return LoginResponse(meta=meta, data=data)
+
+
+@router.get(
+    "/auth/device-bindings",
+    response_model=DeviceBindingListResponse,
+    summary="List trusted devices for the authenticated user",
+    tags=["Authentication"],
+)
+def list_device_bindings_v1(
+    ctx: RequestContext = RequestContextDep,
+    session=CurrentSessionDep,
+    device_binding_service: DeviceBindingService = DeviceBindingServiceDep,
+):
+    bindings = device_binding_service.list_bindings(user_id=session.user_id)
+    meta = build_meta(ctx)
+    resources = [DeviceBindingResource(**binding) for binding in bindings]
+    return DeviceBindingListResponse(meta=meta, data=resources)
+
+
+@router.post(
+    "/auth/device-bindings",
+    response_model=DeviceBindingResponse,
+    summary="Register or refresh a trusted device binding",
+    status_code=status.HTTP_201_CREATED,
+    tags=["Authentication"],
+)
+async def create_device_binding_v1(
+    deviceIdentifier: str = Form(...),
+    fingerprintHash: str = Form(...),
+    registrationMethod: Optional[str] = Form("otp+voice"),
+    platform: Optional[str] = Form(None),
+    deviceLabel: Optional[str] = Form(None),
+    voiceSample: UploadFile | None = File(None),
+    ctx: RequestContext = RequestContextDep,
+    session=CurrentSessionDep,
+    device_binding_service: DeviceBindingService = DeviceBindingServiceDep,
+    voice_verifier: VoiceVerificationService = VoiceVerificationServiceDep,
+):
+    voice_bytes = await voiceSample.read() if voiceSample else None
+    if voice_bytes is None:
+        raise_http_error(
+            ctx,
+            message="Voice sample required to register this device.",
+            code="voice_sample_missing",
+        )
+    voice_hash = hashlib.sha256(voice_bytes).hexdigest() if voice_bytes else None
+    voice_vector = None
+    if voice_bytes:
+        embedding = voice_verifier.compute_embedding(voice_bytes)
+        if embedding is None:
+            raise_http_error(
+                ctx,
+                message="Voice sample too short or unclear. Please record again.",
+                code="voice_sample_invalid",
+            )
+        voice_vector = voice_verifier.serialize_embedding(embedding)
+    binding = device_binding_service.register_or_refresh_binding(
+        user_id=session.user_id,
+        device_identifier=deviceIdentifier,
+        fingerprint_hash=fingerprintHash,
+        platform=platform,
+        device_label=deviceLabel,
+        registration_method=registrationMethod or "otp+voice",
+        voice_signature_hash=voice_hash,
+        voice_signature_vector=voice_vector,
+    )
+    meta = build_meta(ctx)
+    resource = DeviceBindingResource(**binding)
+    return DeviceBindingResponse(meta=meta, data=resource)
+
+
+@router.delete(
+    "/auth/device-bindings/{binding_id}",
+    response_model=DeviceBindingResponse,
+    summary="Revoke a trusted device binding",
+    tags=["Authentication"],
+)
+def revoke_device_binding_v1(
+    binding_id: str,
+    ctx: RequestContext = RequestContextDep,
+    session=CurrentSessionDep,
+    device_binding_service: DeviceBindingService = DeviceBindingServiceDep,
+):
+    binding = device_binding_service.revoke_binding(binding_id=binding_id)
+    if binding is None:
+        raise_http_error(
+            ctx,
+            message="Device binding not found.",
+            code="device_binding_not_found",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+    meta = build_meta(ctx)
+    resource = DeviceBindingResource(**binding)
+    return DeviceBindingResponse(meta=meta, data=resource)
 
 
 @router.get(

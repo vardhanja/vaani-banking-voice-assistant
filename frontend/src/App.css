@@ -50,6 +50,14 @@
   color: rgba(15, 27, 42, 0.66);
 }
 
+.voice-binding-banner {
+  text-align: center;
+  font-size: 0.95rem;
+  color: rgba(255, 143, 66, 0.95);
+  font-weight: 600;
+  margin: -0.5rem 0 0.5rem;
+}
+
 .card-form {
   display: flex;
   flex-direction: column;

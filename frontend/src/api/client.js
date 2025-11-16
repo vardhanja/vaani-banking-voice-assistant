@@ -20,13 +20,35 @@ const extractErrorInfo = (payload, fallback) => {
   return { message, code };
 };
 
-export async function authenticateUser({ userId, password }) {
+export async function authenticateUser({
+  userId,
+  password,
+  deviceIdentifier,
+  deviceFingerprint,
+  deviceLabel,
+  platform,
+  voiceSampleBlob,
+  registrationMethod,
+  voiceBypass,
+}) {
+  const formData = new FormData();
+  formData.append("userId", userId);
+  formData.append("password", password);
+  if (deviceIdentifier) formData.append("deviceIdentifier", deviceIdentifier);
+  if (deviceFingerprint) formData.append("deviceFingerprint", deviceFingerprint);
+  if (deviceLabel) formData.append("deviceLabel", deviceLabel);
+  if (platform) formData.append("platform", platform);
+  if (registrationMethod) formData.append("registrationMethod", registrationMethod);
+  if (voiceSampleBlob) {
+    formData.append("voiceSample", voiceSampleBlob, "voice-login.wav");
+  }
+  if (typeof voiceBypass === "boolean") {
+    formData.append("voiceBypass", voiceBypass ? "true" : "false");
+  }
+
   const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ userId, password }),
+    body: formData,
   });
 
   const payload = await response.json().catch(() => ({}));
@@ -47,6 +69,7 @@ export async function authenticateUser({ userId, password }) {
     accessToken: data.accessToken,
     expiresIn: data.expiresIn,
     meta: payload.meta,
+    detail: data.detail ?? null,
   };
 }
 
@@ -244,6 +267,74 @@ export async function updateReminderStatus({ accessToken, reminderId, status }) 
   return json?.data ?? null;
 }
 
+export async function listDeviceBindings({ accessToken }) {
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/device-bindings`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const { message, code } = extractErrorInfo(payload, "Unable to load device bindings.");
+    const error = new Error(message);
+    if (code) error.code = code;
+    throw error;
+  }
+  return payload?.data ?? [];
+}
+
+export async function registerDeviceBinding({
+  accessToken,
+  deviceIdentifier,
+  fingerprintHash,
+  platform,
+  deviceLabel,
+  registrationMethod,
+  voiceSampleBlob,
+}) {
+  const formData = new FormData();
+  formData.append("deviceIdentifier", deviceIdentifier);
+  formData.append("fingerprintHash", fingerprintHash);
+  if (platform) formData.append("platform", platform);
+  if (deviceLabel) formData.append("deviceLabel", deviceLabel);
+  if (registrationMethod) formData.append("registrationMethod", registrationMethod);
+  if (voiceSampleBlob) {
+    formData.append("voiceSample", voiceSampleBlob, "device-binding.wav");
+  }
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/device-bindings`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: formData,
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const { message, code } = extractErrorInfo(json, "Unable to register device binding.");
+    const error = new Error(message);
+    if (code) error.code = code;
+    throw error;
+  }
+  return json?.data ?? null;
+}
+
+export async function revokeDeviceBinding({ accessToken, bindingId }) {
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/device-bindings/${bindingId}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const { message, code } = extractErrorInfo(json, "Unable to revoke device binding.");
+    const error = new Error(message);
+    if (code) error.code = code;
+    throw error;
+  }
+  return json?.data ?? null;
+}
+
 export default {
   authenticateUser,
   fetchAccounts,
@@ -253,6 +344,9 @@ export default {
   fetchReminders,
   createReminder,
   updateReminderStatus,
+  listDeviceBindings,
+  registerDeviceBinding,
+  revokeDeviceBinding,
 };
 
 

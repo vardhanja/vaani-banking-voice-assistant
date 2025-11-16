@@ -7,14 +7,27 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from secrets import token_urlsafe
 from typing import Optional
+import hashlib
 
 from sqlalchemy.orm import Session
 
 from ..models import Session as SessionModel
-from ..utils.enums import AuthenticationLevel, SessionStatus, TransactionChannel
+from ..utils.enums import (
+    AuthenticationLevel,
+    DeviceTrustLevel,
+    SessionStatus,
+    TransactionChannel,
+)
 from ..engine import session_scope
 from ..repositories.auth import get_session_by_token, get_user_by_customer_number
+from ..repositories import (
+    create_device_binding,
+    get_device_binding_for_device,
+    list_device_bindings,
+    mark_device_binding_trust,
+)
 from ..utils.security import verify_password
+from .voice_verification import VoiceVerificationService
 
 
 @dataclass
@@ -24,6 +37,7 @@ class AuthResult:
     user_profile: Optional[dict] = None
     access_token: Optional[str] = None
     expires_in: Optional[int] = None
+    detail: Optional[dict] = None
 
 
 @dataclass
@@ -33,10 +47,13 @@ class AuthenticatedSession:
     session_id: str
     access_token: str
     expires_at: datetime
+    binding_id: Optional[str] = None
 
 
 ACCESS_TOKEN_TTL_SECONDS = 60 * 30  # 30 minutes
 SESSION_INACTIVITY_TIMEOUT = timedelta(minutes=5)  # RBI-recommended inactivity threshold
+VOICE_VERIFICATION_VALIDITY = timedelta(days=7)
+VOICE_ENROLLMENT_PHRASE = "Sun Bank mera saathi, har kadam surakshit banking ka vaada"
 
 
 class SessionValidationError(Exception):
@@ -51,10 +68,23 @@ class SessionValidationError(Exception):
 class AuthService:
     """Provides user authentication and profile retrieval."""
 
-    def __init__(self, session_factory):
+    def __init__(self, session_factory, voice_verifier: VoiceVerificationService):
         self._session_factory = session_factory
+        self._voice_verifier = voice_verifier
 
-    def authenticate(self, *, customer_number: str, password: str) -> AuthResult:
+    def authenticate(
+        self,
+        *,
+        customer_number: str,
+        password: str,
+        device_identifier: Optional[str] = None,
+        fingerprint_hash: Optional[str] = None,
+        platform: Optional[str] = None,
+        device_label: Optional[str] = None,
+        voice_sample: Optional[bytes] = None,
+        registration_method: Optional[str] = None,
+        voice_bypass: bool = False,
+    ) -> AuthResult:
         with session_scope(self._session_factory) as session:
             user = get_user_by_customer_number(session, customer_number)
             if user is None:
@@ -63,19 +93,190 @@ class AuthService:
             if not verify_password(password, user.password_hash):
                 return AuthResult(success=False, reason="invalid_credentials")
 
-            now = datetime.now(ZoneInfo("Asia/Kolkata"))
+            user_id_value = user.id
+            customer_number_value = user.customer_number
+
+            tz = ZoneInfo("Asia/Kolkata")
+            now = datetime.now(tz)
+            detail: dict = {}
+            binding_id: Optional[str] = None
+
+            if voice_bypass:
+                device_identifier = None
+                fingerprint_hash = None
+                voice_sample = None
+
+            voice_embedding = None
+            voice_vector_bytes: Optional[bytes] = None
+            voice_hash: Optional[str] = None
+            if voice_sample:
+                voice_embedding = self._voice_verifier.compute_embedding(voice_sample)
+                if voice_embedding is not None:
+                    voice_vector_bytes = self._voice_verifier.serialize_embedding(voice_embedding)
+                    voice_hash = hashlib.sha256(voice_sample).hexdigest()
+
+            bindings = list_device_bindings(session, user_id=user_id_value)
+            binding = None
+
+            if device_identifier:
+                binding = get_device_binding_for_device(
+                    session, user_id=user_id_value, device_identifier=device_identifier
+                )
+                if binding:
+                    binding_id = str(binding.id)
+                    detail.setdefault("deviceBindingId", binding_id)
+                    detail.setdefault("voicePhrase", VOICE_ENROLLMENT_PHRASE)
+                    if binding.last_verified_at is not None and binding.last_verified_at.tzinfo is None:
+                        binding.last_verified_at = binding.last_verified_at.replace(tzinfo=tz)
+                    if binding.revoked_at is not None and binding.revoked_at.tzinfo is None:
+                        binding.revoked_at = binding.revoked_at.replace(tzinfo=tz)
+                    if binding.trust_level in (
+                        DeviceTrustLevel.SUSPENDED,
+                        DeviceTrustLevel.REVOKED,
+                    ):
+                        return AuthResult(
+                            success=False,
+                            reason="device_verification_required",
+                            detail={
+                                "bindingId": binding_id,
+                                "trustLevel": binding.trust_level.value,
+                            },
+                        )
+
+                    if fingerprint_hash:
+                        binding.fingerprint_hash = fingerprint_hash
+                    if platform:
+                        binding.platform = platform
+                    if device_label:
+                        binding.device_label = device_label
+
+                    if voice_embedding is None or voice_vector_bytes is None or voice_hash is None:
+                        return AuthResult(
+                            success=False,
+                            reason="voice_sample_invalid",
+                            detail={
+                                "bindingId": binding_id,
+                                "message": "Voice sample was too short or unclear. Please record again.",
+                                "voicePhrase": VOICE_ENROLLMENT_PHRASE,
+                                "rebindSuggested": True,
+                            },
+                        )
+
+                    stored_vector = None
+                    if binding.voice_signature_vector:
+                        stored_vector = self._voice_verifier.deserialize_embedding(
+                            binding.voice_signature_vector
+                        )
+
+                    if stored_vector is not None:
+                        matches, score = self._voice_verifier.matches(stored_vector, voice_embedding)
+                        score_value = float(score)
+                        detail["similarityScore"] = round(score_value, 4)
+                        if not matches:
+                            return AuthResult(
+                                success=False,
+                                reason="voice_mismatch",
+                                detail={
+                                    "bindingId": binding_id,
+                                    "message": "Voice sample did not match stored signature.",
+                                    "voicePhrase": VOICE_ENROLLMENT_PHRASE,
+                                    "similarityScore": round(score_value, 4),
+                                    "rebindSuggested": True,
+                                },
+                            )
+                    else:
+                        detail["enrolled"] = True
+
+                    binding.voice_signature_hash = voice_hash
+                    binding.voice_signature_vector = voice_vector_bytes
+                    binding.last_verified_at = now
+                    detail.pop("voiceEnrollmentRequired", None)
+                    detail.pop("voiceReverificationRequired", None)
+                    detail.pop("voicePhrase", None)
+                    binding.revoked_at = None
+                    mark_device_binding_trust(
+                        session, binding=binding, trust_level=DeviceTrustLevel.TRUSTED
+                    )
+                else:
+                    if voice_embedding is None or voice_vector_bytes is None or voice_hash is None:
+                        return AuthResult(
+                            success=False,
+                            reason="voice_sample_invalid",
+                            detail={
+                                "message": "Voice sample was too short or unclear. Please record again.",
+                                "voicePhrase": VOICE_ENROLLMENT_PHRASE,
+                            },
+                        )
+
+                    new_binding = create_device_binding(
+                        session,
+                        user_id=user_id_value,
+                        device_identifier=device_identifier,
+                        fingerprint_hash=fingerprint_hash or device_identifier,
+                        registration_method=registration_method or "otp+voice",
+                        platform=platform,
+                        device_label=device_label,
+                        voice_signature_hash=voice_hash,
+                        voice_signature_vector=voice_vector_bytes,
+                    )
+                    session.flush()
+                    session.refresh(new_binding)
+                    binding = new_binding
+                    binding.last_verified_at = now
+                    session.flush()
+                    binding_id = str(binding.id)
+                    detail = {"deviceBindingId": binding_id, "enrolled": True}
+            else:
+                if voice_bypass:
+                    detail["voiceBypass"] = True
+                    if bindings:
+                        detail.setdefault(
+                            "deviceBindings",
+                            [
+                                {
+                                    "bindingId": str(existing.id),
+                                    "trustLevel": existing.trust_level.value,
+                                }
+                                for existing in bindings
+                            ],
+                        )
+                        detail.setdefault("voicePhrase", VOICE_ENROLLMENT_PHRASE)
+                else:
+                    if bindings:
+                        return AuthResult(
+                            success=False,
+                            reason="device_verification_required",
+                            detail={
+                                "message": "Trusted device required for this account.",
+                                "expectedBindings": len(bindings),
+                            },
+                        )
+                    detail["deviceBindingRequired"] = True
+                    detail["voicePhrase"] = VOICE_ENROLLMENT_PHRASE
+                    if voice_embedding is None or voice_vector_bytes is None or voice_hash is None:
+                        detail["voicePhrase"] = VOICE_ENROLLMENT_PHRASE
+                        return AuthResult(
+                            success=False,
+                            reason="voice_sample_invalid",
+                            detail={
+                                **detail,
+                                "message": "Voice sample was too short or unclear. Please record again.",
+                                "rebindSuggested": True,
+                            },
+                        )
+
             token = token_urlsafe(32)
             expires_at = now + timedelta(seconds=ACCESS_TOKEN_TTL_SECONDS)
 
             session_record = SessionModel(
-                user_id=user.id,
+                user_id=user_id_value,
                 external_id=token,
                 access_token=token,
                 channel=TransactionChannel.VOICE,
                 status=SessionStatus.ACTIVE,
                 auth_level=AuthenticationLevel.FULL,
-                device_fingerprint=None,
-                mfa_method="password+voice",
+                device_fingerprint=device_identifier or fingerprint_hash,
+                mfa_method="password+binding",
                 started_at=now,
                 last_activity_at=now,
                 last_intent="login",
@@ -83,8 +284,9 @@ class AuthService:
             )
             session.add(session_record)
             user.last_login_at = now
+            session.flush()
+            session.refresh(user)
 
-            # Build profile payload
             primary_branch = user.primary_branch
             accounts = [
                 {
@@ -105,7 +307,7 @@ class AuthService:
                 }
 
             profile = {
-                "customerId": user.customer_number,
+                "customerId": customer_number_value,
                 "fullName": f"{user.first_name} {user.last_name}",
                 "segment": user.risk_segment.title(),
                 "branch": {
@@ -120,11 +322,21 @@ class AuthService:
                 "nextReminder": upcoming_reminder,
             }
 
+            if binding_id:
+                detail.setdefault("deviceBindingId", binding_id)
+            if voice_bypass:
+                detail.setdefault("voiceBypass", True)
+                detail.setdefault(
+                    "voiceMessage",
+                    "Voice verification skipped. Rebind this device to restore quick voice login.",
+                )
+
             return AuthResult(
                 success=True,
                 user_profile=profile,
                 access_token=token,
                 expires_in=ACCESS_TOKEN_TTL_SECONDS,
+                detail=detail or None,
             )
 
     def validate_token(self, *, token: str) -> AuthenticatedSession:

@@ -7,6 +7,7 @@ import Login from "./pages/Login.jsx";
 import Profile from "./pages/Profile.jsx";
 import Transactions from "./pages/Transactions.jsx";
 import Reminders from "./pages/Reminders.jsx";
+import DeviceBinding from "./pages/DeviceBinding.jsx";
 import { authenticateUser } from "./api/client.js";
 
 const mockProfile = {
@@ -45,14 +46,35 @@ const App = () => {
     accessToken: null,
     expiresAt: null,
     meta: null,
+    detail: null,
   });
 
-  const authenticate = async ({ userId, password }) => {
+  const authenticate = async ({
+    userId,
+    password,
+    rememberDevice,
+    deviceIdentifier,
+    deviceFingerprint,
+    platform,
+    deviceLabel,
+    voiceSampleBlob,
+    voiceBypass,
+  }) => {
     if (!userId || userId.length < 4) {
       return { success: false, message: "Enter a valid User ID." };
     }
 
-    const loginResult = await authenticateUser({ userId, password });
+    const loginResult = await authenticateUser({
+      userId,
+      password,
+      deviceIdentifier,
+      deviceFingerprint,
+      platform,
+      deviceLabel,
+      registrationMethod: rememberDevice ? "otp+voice" : "password",
+      voiceSampleBlob,
+      voiceBypass,
+    });
     if (!loginResult.success || !loginResult.profile) {
       return {
         success: false,
@@ -80,6 +102,7 @@ const App = () => {
       accessToken: loginResult.accessToken ?? null,
       expiresAt,
       meta: loginResult.meta ?? null,
+      detail: loginResult.detail ?? null,
     });
     navigate("/profile", { replace: true });
     return { success: true };
@@ -92,6 +115,7 @@ const App = () => {
       accessToken: null,
       expiresAt: null,
       meta: null,
+      detail: null,
     });
     navigate("/", { replace: true });
   };
@@ -111,6 +135,7 @@ const App = () => {
             <Profile
               user={session.user}
               accessToken={session.accessToken}
+              sessionDetail={session.detail}
               onSignOut={signOut}
             />
           ) : (
@@ -133,6 +158,16 @@ const App = () => {
         element={
           session.authenticated ? (
             <Reminders session={session} onSignOut={signOut} />
+          ) : (
+            <Navigate to="/" replace />
+          )
+        }
+      />
+      <Route
+        path="/device-binding"
+        element={
+          session.authenticated ? (
+            <DeviceBinding session={session} onSignOut={signOut} />
           ) : (
             <Navigate to="/" replace />
           )

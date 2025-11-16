@@ -48,6 +48,12 @@ class SessionStatus(str, Enum):
     ERROR = "error"
 
 
+class DeviceTrustLevel(str, Enum):
+    TRUSTED = "trusted"
+    SUSPENDED = "suspended"
+    REVOKED = "revoked"
+
+
 class AuthenticationLevel(str, Enum):
     PASSIVE = "passive"
     STEP_UP = "step_up"
@@ -92,6 +98,7 @@ __all__ = [
     "CardStatus",
     "ReminderType",
     "ReminderStatus",
+    "DeviceTrustLevel",
 ]
 
 

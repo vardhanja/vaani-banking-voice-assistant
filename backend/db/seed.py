@@ -26,6 +26,7 @@ from .models import (
     Account,
     Branch,
     Card,
+    DeviceBinding,
     Reminder,
     Session,
     Transaction,
@@ -37,6 +38,7 @@ from .utils.enums import (
     AuthenticationLevel,
     CardStatus,
     CardType,
+    DeviceTrustLevel,
     ReminderStatus,
     ReminderType,
     SessionStatus,
@@ -172,6 +174,25 @@ def _create_session_for_user(session, user: User, fake: Faker) -> Session:
     return voice_session
 
 
+def _create_device_binding(session, *, user: User, fake: Faker):
+    binding = DeviceBinding(
+        user_id=user.id,
+        device_identifier=fake.md5(raw_output=False),
+        fingerprint_hash=fake.sha1(raw_output=False),
+        voice_signature_hash=fake.sha1(raw_output=False),
+        voice_signature_vector=None,
+        registration_method="seeded",
+        platform=random.choice(["android", "ios", "web"]),
+        device_label=random.choice(
+            ["Primary Phone", "Home Laptop", "Village CSC Kiosk", "Family Tablet"]
+        ),
+        trust_level=DeviceTrustLevel.TRUSTED,
+        last_verified_at=datetime.now(ZoneInfo("Asia/Kolkata"))
+        - timedelta(days=random.randint(0, 10)),
+    )
+    session.add(binding)
+
+
 def _create_card_for_account(session, user: User, account: Account, fake: Faker) -> Card:
     masked = f"XXXX-XXXX-XXXX-{fake.random_number(digits=4, fix_len=True)}"
     card = Card(
@@ -301,6 +322,7 @@ def seed_database(user_count: int = 100):
 
             voice_session = _create_session_for_user(session, user=user, fake=fake)
             user.last_login_at = voice_session.started_at
+            _create_device_binding(session, user=user, fake=fake)
 
             for account in accounts:
                 _create_transactions_for_account(

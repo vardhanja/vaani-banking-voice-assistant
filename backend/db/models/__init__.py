@@ -10,6 +10,7 @@ from .session import Session
 from .transaction import Transaction
 from .card import Card
 from .reminder import Reminder
+from .device_binding import DeviceBinding
 
 __all__ = [
     "Branch",
@@ -19,6 +20,7 @@ __all__ = [
     "Transaction",
     "Card",
     "Reminder",
+    "DeviceBinding",
 ]
 
 

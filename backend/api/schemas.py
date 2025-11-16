@@ -42,6 +42,24 @@ class LoginRequest(BaseModel):
     password: constr(min_length=4, max_length=128) = Field(
         description="Secret shared during onboarding or updated by customer."
     )
+    deviceIdentifier: Optional[constr(min_length=4, max_length=128)] = Field(
+        default=None,
+        description="Stable identifier for the customer device (hashed fingerprint).",
+    )
+    deviceFingerprint: Optional[constr(min_length=8, max_length=256)] = Field(
+        default=None,
+        description="Additional device fingerprint or browser signature hash.",
+    )
+    deviceLabel: Optional[constr(max_length=120)] = Field(
+        default=None, description="Friendly label shown to the customer."
+    )
+    platform: Optional[constr(max_length=40)] = Field(
+        default=None, description="Platform or operating system (e.g., ios, android, web)."
+    )
+    registrationMethod: Optional[constr(max_length=40)] = Field(
+        default="otp+voice",
+        description="Method used to confirm device binding (otp, otp+voice, etc.).",
+    )
 
 
 class AccountSummary(BaseModel):
@@ -77,6 +95,7 @@ class LoginData(BaseModel):
     tokenType: str = "Bearer"
     expiresIn: int
     profile: UserProfile
+    detail: Optional[dict] = None
 
 
 class LoginResponse(BaseModel):
@@ -217,6 +236,42 @@ class ReminderListResponse(BaseModel):
     data: List[ReminderResource]
 
 
+# --- Device Bindings -------------------------------------------------------------
+
+
+class DeviceBindingResource(BaseModel):
+    id: str
+    deviceIdentifier: str
+    registrationMethod: str
+    platform: Optional[str] = None
+    deviceLabel: Optional[str] = None
+    trustLevel: str
+    voiceSignaturePresent: bool
+    lastVerifiedAt: Optional[datetime] = None
+    revokedAt: Optional[datetime] = None
+    createdAt: Optional[datetime] = None
+    updatedAt: Optional[datetime] = None
+
+
+class DeviceBindingCreateRequest(BaseModel):
+    deviceIdentifier: constr(min_length=4, max_length=128)
+    fingerprintHash: constr(min_length=8, max_length=256)
+    registrationMethod: Optional[constr(max_length=40)] = "otp+voice"
+    platform: Optional[constr(max_length=40)] = None
+    deviceLabel: Optional[constr(max_length=120)] = None
+    voiceSignatureHash: Optional[constr(min_length=8, max_length=256)] = None
+
+
+class DeviceBindingResponse(BaseModel):
+    meta: ResponseMeta
+    data: DeviceBindingResource
+
+
+class DeviceBindingListResponse(BaseModel):
+    meta: ResponseMeta
+    data: List[DeviceBindingResource]
+
+
 __all__ = [
     "ResponseMeta",
     "ErrorDetail",
@@ -238,4 +293,8 @@ __all__ = [
     "ReminderStatusUpdateRequest",
     "ReminderResponse",
     "ReminderListResponse",
+    "DeviceBindingCreateRequest",
+    "DeviceBindingResponse",
+    "DeviceBindingListResponse",
+    "DeviceBindingResource",
 ]

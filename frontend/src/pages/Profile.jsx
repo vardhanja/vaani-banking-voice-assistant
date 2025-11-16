@@ -47,7 +47,7 @@ const SESSION_EXPIRY_CODES = new Set([
   "session_invalid",
 ]);
 
-const Profile = ({ user, accessToken, onSignOut }) => {
+const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
   const navigate = useNavigate();
 
   const [panels, setPanels] = useState({
@@ -94,6 +94,12 @@ const Profile = ({ user, accessToken, onSignOut }) => {
     recurrenceRule: "",
   });
   const [reminderStatus, setReminderStatus] = useState(null);
+
+  const bindingDetail = sessionDetail ?? {};
+  const deviceBindingRequired = Boolean(bindingDetail.deviceBindingRequired);
+  const voiceEnrollmentRequired = Boolean(bindingDetail.voiceEnrollmentRequired);
+  const voiceReverificationRequired = Boolean(bindingDetail.voiceReverificationRequired);
+  const voicePhrase = bindingDetail.voicePhrase ?? "Sun Bank hai mera saathi";
 
   const handleSessionExpiry = useCallback(
     (error, setter) => {
@@ -471,6 +477,30 @@ const Profile = ({ user, accessToken, onSignOut }) => {
             }
           />
           <main className="card-surface profile-surface">
+            {(deviceBindingRequired || voiceEnrollmentRequired || voiceReverificationRequired) && (
+              <section className="profile-card profile-card--span">
+                <div className="form-error">
+                  <p>
+                    {deviceBindingRequired
+                      ? "For secure banking, please bind this device and verify your voice."
+                      : voiceEnrollmentRequired
+                        ? "Complete voice signature enrollment to finish device binding."
+                        : "Please refresh your voice signature to keep this device trusted."}
+                  </p>
+                  <p className="profile-hint">
+                    Speak the passphrase: <strong>{voicePhrase}</strong>
+                  </p>
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => navigate("/device-binding")}
+                  >
+                    Manage device & voice binding
+                  </button>
+                </div>
+              </section>
+            )}
+
             <section className="profile-hero">
               <div>
                 <p className="profile-eyebrow">Logged in as</p>
@@ -621,6 +651,13 @@ const Profile = ({ user, accessToken, onSignOut }) => {
                     disabled={!canPerformActions}
                   >
                     Manage reminders
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => navigate("/device-binding")}
+                  >
+                    Trusted devices
                   </button>
                 </div>
               </article>
@@ -971,11 +1008,17 @@ Profile.propTypes = {
   }),
   accessToken: PropTypes.string,
   onSignOut: PropTypes.func.isRequired,
+  sessionDetail: PropTypes.shape({
+    deviceBindingRequired: PropTypes.bool,
+    voiceEnrollmentRequired: PropTypes.bool,
+    voiceReverificationRequired: PropTypes.bool,
+  }),
 };
 
 Profile.defaultProps = {
   user: null,
   accessToken: null,
+  sessionDetail: null,
 };
 
 export default Profile;
