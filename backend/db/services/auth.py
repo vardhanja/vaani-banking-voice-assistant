@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from secrets import token_urlsafe
 from typing import Optional
 
@@ -29,11 +30,22 @@ class AuthResult:
 class AuthenticatedSession:
     user_id: str
     customer_number: str
+    session_id: str
     access_token: str
     expires_at: datetime
 
 
 ACCESS_TOKEN_TTL_SECONDS = 60 * 30  # 30 minutes
+SESSION_INACTIVITY_TIMEOUT = timedelta(minutes=5)  # RBI-recommended inactivity threshold
+
+
+class SessionValidationError(Exception):
+    """Represents an invalid or expired session state."""
+
+    def __init__(self, *, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+        self.message = message
 
 
 class AuthService:
@@ -51,7 +63,7 @@ class AuthService:
             if not verify_password(password, user.password_hash):
                 return AuthResult(success=False, reason="invalid_credentials")
 
-            now = datetime.now(timezone.utc)
+            now = datetime.now(ZoneInfo("Asia/Kolkata"))
             token = token_urlsafe(32)
             expires_at = now + timedelta(seconds=ACCESS_TOKEN_TTL_SECONDS)
 
@@ -65,6 +77,7 @@ class AuthService:
                 device_fingerprint=None,
                 mfa_method="password+voice",
                 started_at=now,
+                last_activity_at=now,
                 last_intent="login",
                 token_expires_at=expires_at,
             )
@@ -114,30 +127,76 @@ class AuthService:
                 expires_in=ACCESS_TOKEN_TTL_SECONDS,
             )
 
-    def validate_token(self, *, token: str) -> AuthenticatedSession | None:
+    def validate_token(self, *, token: str) -> AuthenticatedSession:
+        error: SessionValidationError | None = None
+        result: AuthenticatedSession | None = None
+
         with session_scope(self._session_factory) as session:
             session_record = get_session_by_token(session, token)
-            if (
-                session_record is None
-                or session_record.status != SessionStatus.ACTIVE
-                or session_record.token_expires_at is None
-            ):
-                return None
+            tz = ZoneInfo("Asia/Kolkata")
+            now = datetime.now(tz)
 
-            expires_at = session_record.token_expires_at
-            if expires_at.tzinfo is None:
-                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if session_record is None:
+                error = SessionValidationError(
+                    code="session_invalid",
+                    message="Invalid or expired access token.",
+                )
+            elif session_record.status != SessionStatus.ACTIVE:
+                error = SessionValidationError(
+                    code="session_inactive",
+                    message="Session is no longer active. Please sign in again.",
+                )
+            elif session_record.token_expires_at is None:
+                error = SessionValidationError(
+                    code="session_invalid",
+                    message="Session metadata is incomplete. Please sign in again.",
+                )
+            else:
+                expires_at = session_record.token_expires_at
+                if expires_at is not None and expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=tz)
 
-            if expires_at < datetime.now(timezone.utc):
-                return None
+                if expires_at is not None and expires_at < now:
+                    session_record.status = SessionStatus.EXPIRED
+                    session_record.ended_at = now
+                    session.flush()
+                    error = SessionValidationError(
+                        code="session_expired",
+                        message="Your session has expired. Please sign in again.",
+                    )
+                else:
+                    last_activity = session_record.last_activity_at or session_record.started_at
+                    if last_activity is not None:
+                        if last_activity.tzinfo is None:
+                            last_activity = last_activity.replace(tzinfo=tz)
+                        if (now - last_activity) > SESSION_INACTIVITY_TIMEOUT:
+                            session_record.status = SessionStatus.EXPIRED
+                            session_record.ended_at = now
+                            session.flush()
+                            error = SessionValidationError(
+                                code="session_timeout",
+                                message="Your session ended due to inactivity. Please sign in again.",
+                            )
+                    if error is None:
+                        session_record.last_activity_at = now
+                        session.flush()
+                        user = session_record.user
+                        result = AuthenticatedSession(
+                            user_id=str(user.id),
+                            customer_number=user.customer_number,
+                            session_id=str(session_record.id),
+                            access_token=session_record.access_token,
+                            expires_at=expires_at,
+                        )
 
-            user = session_record.user
-            return AuthenticatedSession(
-                user_id=str(user.id),
-                customer_number=user.customer_number,
-                access_token=session_record.access_token,
-                expires_at=expires_at,
+        if error is not None:
+            raise error
+        if result is None:
+            raise SessionValidationError(
+                code="session_invalid",
+                message="Invalid or expired access token.",
             )
+        return result
 
 
 __all__ = ["AuthService", "AuthResult", "AuthenticatedSession", "ACCESS_TOKEN_TTL_SECONDS"]

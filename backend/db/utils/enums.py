@@ -44,6 +44,7 @@ class SessionStatus(str, Enum):
     ACTIVE = "active"
     COMPLETED = "completed"
     TERMINATED = "terminated"
+    EXPIRED = "expired"
     ERROR = "error"
 
 

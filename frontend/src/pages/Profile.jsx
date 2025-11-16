@@ -40,6 +40,12 @@ const parseBalanceString = (value) => {
 };
 
 const PANEL_KEYS = ["balance", "transfer", "transactions", "reminders"];
+const SESSION_EXPIRY_CODES = new Set([
+  "session_timeout",
+  "session_expired",
+  "session_inactive",
+  "session_invalid",
+]);
 
 const Profile = ({ user, accessToken, onSignOut }) => {
   const navigate = useNavigate();
@@ -89,6 +95,21 @@ const Profile = ({ user, accessToken, onSignOut }) => {
   });
   const [reminderStatus, setReminderStatus] = useState(null);
 
+  const handleSessionExpiry = useCallback(
+    (error, setter) => {
+    if (error?.code && SESSION_EXPIRY_CODES.has(error.code)) {
+      const message = "Your session expired due to inactivity. Please sign in again.";
+      if (typeof setter === "function") {
+        setter(message);
+      }
+      onSignOut();
+      return true;
+    }
+    return false;
+    },
+    [onSignOut],
+  );
+
   useEffect(() => {
     if (!accessToken) {
       return;
@@ -103,6 +124,7 @@ const Profile = ({ user, accessToken, onSignOut }) => {
       })
       .catch((error) => {
         if (!isMounted) return;
+        if (handleSessionExpiry(error, setAccountsError)) return;
         setAccountsError(error.message);
       })
       .finally(() => {
@@ -113,7 +135,7 @@ const Profile = ({ user, accessToken, onSignOut }) => {
     return () => {
       isMounted = false;
     };
-  }, [accessToken]);
+  }, [accessToken, handleSessionExpiry]);
 
   useEffect(() => {
     if (!accessToken) {
@@ -129,6 +151,7 @@ const Profile = ({ user, accessToken, onSignOut }) => {
       })
       .catch((error) => {
         if (!isMounted) return;
+        if (handleSessionExpiry(error, setRemindersError)) return;
         setRemindersError(error.message);
       })
       .finally(() => {
@@ -139,7 +162,7 @@ const Profile = ({ user, accessToken, onSignOut }) => {
     return () => {
       isMounted = false;
     };
-  }, [accessToken]);
+  }, [accessToken, handleSessionExpiry]);
 
   const accountsByNumber = useMemo(() => {
     const map = new Map();
@@ -261,12 +284,15 @@ const Profile = ({ user, accessToken, onSignOut }) => {
         const data = await fetchTransactions({ accessToken, accountId, limit: 5 });
         setTransactions(data);
       } catch (error) {
+        if (handleSessionExpiry(error, setTransactionsError)) {
+          return;
+        }
         setTransactionsError(error.message);
       } finally {
         setTransactionsLoading(false);
       }
     },
-    [accessToken],
+    [accessToken, handleSessionExpiry],
   );
 
   useEffect(() => {
@@ -288,6 +314,9 @@ const Profile = ({ user, accessToken, onSignOut }) => {
       const data = await fetchAccountBalance({ accessToken, accountId: balanceAccountId });
       setBalanceResult(data);
     } catch (error) {
+      if (handleSessionExpiry(error, setBalanceError)) {
+        return;
+      }
       setBalanceError(error.message);
     } finally {
       setBalanceLoading(false);
@@ -337,6 +366,13 @@ const Profile = ({ user, accessToken, onSignOut }) => {
         handleViewTransactions(transferForm.sourceAccountId, accountNumber);
       }
     } catch (error) {
+      if (
+        handleSessionExpiry(error, (msg) =>
+          setTransferStatus({ type: "error", message: msg }),
+        )
+      ) {
+        return;
+      }
       setTransferStatus({ type: "error", message: error.message });
     } finally {
       setTransferLoading(false);
@@ -371,6 +407,13 @@ const Profile = ({ user, accessToken, onSignOut }) => {
         recurrenceRule: "",
       }));
     } catch (error) {
+      if (
+        handleSessionExpiry(error, (msg) =>
+          setReminderStatus({ type: "error", message: msg }),
+        )
+      ) {
+        return;
+      }
       setReminderStatus({ type: "error", message: error.message });
     }
   };
@@ -383,6 +426,13 @@ const Profile = ({ user, accessToken, onSignOut }) => {
         prev.map((reminder) => (reminder.id === updated.id ? updated : reminder)),
       );
     } catch (error) {
+      if (
+        handleSessionExpiry(error, (msg) =>
+          setReminderStatus({ type: "error", message: msg }),
+        )
+      ) {
+        return;
+      }
       setReminderStatus({ type: "error", message: error.message });
     }
   };

@@ -122,7 +122,7 @@ const App = () => {
         path="/transactions"
         element={
           session.authenticated ? (
-            <Transactions session={session} />
+            <Transactions session={session} onSignOut={signOut} />
           ) : (
             <Navigate to="/" replace />
           )
@@ -132,7 +132,7 @@ const App = () => {
         path="/reminders"
         element={
           session.authenticated ? (
-            <Reminders session={session} />
+            <Reminders session={session} onSignOut={signOut} />
           ) : (
             <Navigate to="/" replace />
           )

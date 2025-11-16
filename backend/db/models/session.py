@@ -15,7 +15,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 
-from sqlalchemy.sql import func
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from ..base import Base
 from ..utils.enums import AuthenticationLevel, SessionStatus, TransactionChannel
@@ -52,10 +53,19 @@ class Session(Base):
     )
     device_fingerprint = Column(String(120), nullable=True)
     mfa_method = Column(String(40), nullable=True)
-    started_at = Column(DateTime(timezone=True), default=func.now, nullable=False)
+    started_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(ZoneInfo("Asia/Kolkata")),
+        nullable=False,
+    )
     ended_at = Column(DateTime(timezone=True), nullable=True)
     last_intent = Column(String(80), nullable=True)
     token_expires_at = Column(DateTime(timezone=True), nullable=True)
+    last_activity_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(ZoneInfo("Asia/Kolkata")),
+        nullable=False,
+    )
 
     user = relationship("User", back_populates="sessions")
     transactions = relationship("Transaction", back_populates="session")

@@ -1,5 +1,5 @@
 import PropTypes from "prop-types";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 
 import SunHeader from "../components/SunHeader.jsx";
@@ -15,7 +15,14 @@ const formatDateTime = (value) => {
   });
 };
 
-const RemindersPage = ({ session }) => {
+const SESSION_EXPIRY_CODES = new Set([
+  "session_timeout",
+  "session_expired",
+  "session_inactive",
+  "session_invalid",
+]);
+
+const RemindersPage = ({ session, onSignOut }) => {
   const navigate = useNavigate();
   const isAuthenticated = Boolean(session?.authenticated);
   const accessToken = session?.accessToken ?? null;
@@ -23,6 +30,21 @@ const RemindersPage = ({ session }) => {
   const [reminders, setReminders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const handleSessionExpiry = useCallback(
+    (err, setter) => {
+      if (err?.code && SESSION_EXPIRY_CODES.has(err.code)) {
+        const message = "Your session expired due to inactivity. Please sign in again.";
+        if (typeof setter === "function") {
+          setter(message);
+        }
+        onSignOut?.();
+        return true;
+      }
+      return false;
+    },
+    [onSignOut],
+  );
 
   useEffect(() => {
     if (!isAuthenticated || !accessToken) {
@@ -41,6 +63,9 @@ const RemindersPage = ({ session }) => {
         }
       } catch (err) {
         if (isMounted) {
+          if (handleSessionExpiry(err, setError)) {
+            return;
+          }
           setError(err.message);
         }
       } finally {
@@ -55,7 +80,7 @@ const RemindersPage = ({ session }) => {
     return () => {
       isMounted = false;
     };
-  }, [isAuthenticated, accessToken]);
+  }, [isAuthenticated, accessToken, handleSessionExpiry]);
 
   const handleMarkSent = async (reminderId) => {
     if (!accessToken) return;
@@ -69,6 +94,9 @@ const RemindersPage = ({ session }) => {
         prev.map((reminder) => (reminder.id === updated.id ? updated : reminder)),
       );
     } catch (err) {
+      if (handleSessionExpiry(err, setError)) {
+        return;
+      }
       setError(err.message);
     }
   };
@@ -134,6 +162,7 @@ RemindersPage.propTypes = {
     authenticated: PropTypes.bool,
     accessToken: PropTypes.string,
   }).isRequired,
+  onSignOut: PropTypes.func.isRequired,
 };
 
 export default RemindersPage;

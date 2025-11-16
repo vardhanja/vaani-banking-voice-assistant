@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from ..db.services.auth import AuthenticatedSession, AuthService
+from ..db.services.auth import (
+    AuthenticatedSession,
+    AuthService,
+    SessionValidationError,
+)
 from .dependencies import get_auth_service
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -40,9 +45,11 @@ def get_request_context(
     locale = accept_language or "en-IN"
     customer_ip = x_psu_ip_address or x_forwarded_for
 
+    ist = ZoneInfo("Asia/Kolkata")
+
     return RequestContext(
         request_id=request_id,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(ist),
         locale=locale,
         channel="voice-web",
         device_id=x_device_id,
@@ -57,14 +64,25 @@ def get_current_session(
     if credentials is None or not credentials.credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid authorization header.",
+            detail={
+                "error": {
+                    "code": "authorization_required",
+                    "message": "Missing or invalid authorization header.",
+                }
+            },
         )
 
-    session = auth_service.validate_token(token=credentials.credentials)
-    if session is None:
+    try:
+        session = auth_service.validate_token(token=credentials.credentials)
+    except SessionValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired access token.",
+            detail={
+                "error": {
+                    "code": exc.code,
+                    "message": exc.message,
+                }
+            },
         )
     return session
 

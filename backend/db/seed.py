@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import random
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 from typing import Dict, Iterable
 
@@ -143,7 +144,7 @@ def _create_accounts_for_user(
 
 
 def _create_session_for_user(session, user: User, fake: Faker) -> Session:
-    started_at = datetime.now(timezone.utc) - timedelta(days=random.randint(1, 30))
+    started_at = datetime.now(ZoneInfo("Asia/Kolkata")) - timedelta(days=random.randint(1, 30))
     ended_at = started_at + timedelta(minutes=random.randint(5, 25))
 
     voice_session = Session(
@@ -156,6 +157,7 @@ def _create_session_for_user(session, user: User, fake: Faker) -> Session:
         mfa_method=random.choice(["voice_biometric", "otp", "device_binding"]),
         started_at=started_at,
         ended_at=ended_at,
+        last_activity_at=ended_at,
         last_intent=random.choice(
             [
                 "balance_inquiry",
@@ -224,7 +226,7 @@ def _create_transactions_for_account(
             reference_id=str(uuid.uuid4())[:12],
             counterparty_account=fake.bban(),
             counterparty_name=fake.name(),
-            occurred_at=datetime.now(timezone.utc) - timedelta(days=random.randint(1, 90)),
+            occurred_at=datetime.now(ZoneInfo("Asia/Kolkata")) - timedelta(days=random.randint(1, 90)),
         )
         session.add(transaction)
 
@@ -238,7 +240,7 @@ def _create_reminder(session, *, user: User, account: Account, fake: Faker):
         ),
         status=random.choice([ReminderStatus.PENDING, ReminderStatus.SENT]),
         message=fake.sentence(nb_words=12),
-        remind_at=datetime.now(timezone.utc) + timedelta(days=random.randint(3, 30)),
+        remind_at=datetime.now(ZoneInfo("Asia/Kolkata")) + timedelta(days=random.randint(3, 30)),
         channel=random.choice(["voice", "sms", "push"]),
         recurrence_rule=random.choice([None, "FREQ=MONTHLY;COUNT=6"]),
     )

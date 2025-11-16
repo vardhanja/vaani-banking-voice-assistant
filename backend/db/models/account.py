@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import (
     Column,
@@ -48,7 +49,7 @@ class Account(Base):
     last_activity_on = Column(
         DateTime(timezone=True),
         nullable=True,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(ZoneInfo("Asia/Kolkata")),
     )
     nominee_name = Column(String(120), nullable=True)
 
