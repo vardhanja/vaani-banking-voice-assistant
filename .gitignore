@@ -14,3 +14,7 @@ frontend/.vite/
 
 # AI backend environment
 ai/.env
+
+# Log files
+*.log
+ai/logs/
