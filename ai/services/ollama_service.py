@@ -14,11 +14,13 @@ class OllamaService:
     """Service for interacting with Ollama models"""
     
     def __init__(self):
-        self.base_url = settings.ollama_base_url
+        # Ensure base_url doesn't have trailing slash
+        base_url = settings.ollama_base_url.rstrip('/')
+        self.base_url = base_url
         self.model = settings.ollama_model
         self.fast_model = settings.ollama_fast_model
         self.timeout = settings.ollama_timeout
-        self.client = httpx.AsyncClient(timeout=self.timeout)
+        self.client = httpx.AsyncClient(timeout=self.timeout, follow_redirects=True)
         
         logger.info(
             "ollama_service_initialized",
@@ -61,26 +63,30 @@ class OllamaService:
         start_time = time.time()
         
         try:
+            url = f"{self.base_url}/api/chat"
+            payload = {
+                "model": model,
+                "messages": messages,
+                "stream": False,
+                "options": {
+                    "temperature": temperature,
+                    "top_p": settings.llm_top_p,
+                    "num_ctx": settings.ollama_num_ctx,
+                    "num_predict": max_tokens,
+                },
+            }
+            
             logger.debug(
                 "ollama_chat_request",
                 model=model,
                 num_messages=len(messages),
                 temperature=temperature,
+                url=url,
             )
             
             response = await self.client.post(
-                f"{self.base_url}/api/chat",
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "stream": False,
-                    "options": {
-                        "temperature": temperature,
-                        "top_p": settings.llm_top_p,
-                        "num_ctx": settings.ollama_num_ctx,
-                        "num_predict": max_tokens,
-                    },
-                },
+                url,
+                json=payload,
             )
             
             response.raise_for_status()
@@ -108,10 +114,17 @@ class OllamaService:
             return content
             
         except httpx.HTTPStatusError as e:
+            error_body = ""
+            try:
+                error_body = e.response.text
+            except:
+                pass
             logger.error(
                 "ollama_http_error",
                 status_code=e.response.status_code,
                 error=str(e),
+                error_body=error_body,
+                url=f"{self.base_url}/api/chat",
             )
             raise OllamaServiceError(f"Ollama HTTP error: {e}")
             
