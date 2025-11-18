@@ -20,13 +20,37 @@ const extractErrorInfo = (payload, fallback) => {
   return { message, code };
 };
 
-export async function authenticateUser({ userId, password }) {
+export async function authenticateUser({
+  userId,
+  password,
+  loginMode,
+  deviceIdentifier,
+  deviceFingerprint,
+  deviceLabel,
+  platform,
+  voiceSampleBlob,
+  registrationMethod,
+  otp,
+  validateOnly,
+}) {
+  const formData = new FormData();
+  formData.append("userId", userId);
+  formData.append("password", password);
+  if (loginMode) formData.append("loginMode", loginMode);
+  if (deviceIdentifier) formData.append("deviceIdentifier", deviceIdentifier);
+  if (deviceFingerprint) formData.append("deviceFingerprint", deviceFingerprint);
+  if (deviceLabel) formData.append("deviceLabel", deviceLabel);
+  if (platform) formData.append("platform", platform);
+  if (registrationMethod) formData.append("registrationMethod", registrationMethod);
+  if (voiceSampleBlob) {
+    formData.append("voiceSample", voiceSampleBlob, "voice-login.wav");
+  }
+  if (otp) formData.append("otp", otp);
+  if (validateOnly) formData.append("validateOnly", "true");
+
   const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ userId, password }),
+    body: formData,
   });
 
   const payload = await response.json().catch(() => ({}));
@@ -47,6 +71,7 @@ export async function authenticateUser({ userId, password }) {
     accessToken: data.accessToken,
     expiresIn: data.expiresIn,
     meta: payload.meta,
+    detail: data.detail ?? null,
   };
 }
 
@@ -174,7 +199,7 @@ export async function fetchReminders({ accessToken }) {
   }
 
   if (!response.ok) {
-    const { message, code } = extractErrorInfo(payload, "Unable to load reminders.");
+    const { message, code } = extractErrorInfo(payload, "Unable to fetch reminders.");
     const error = new Error(message);
     if (code) error.code = code;
     throw error;
@@ -213,7 +238,7 @@ export async function createReminder({ accessToken, payload }) {
   return json?.data ?? null;
 }
 
-export async function updateReminderStatus({ accessToken, reminderId, status }) {
+export async function updateReminderStatus({ accessToken, reminderId, payload }) {
   let response;
   try {
     response = await fetch(`${API_BASE_URL}/api/v1/reminders/${reminderId}`, {
@@ -222,7 +247,7 @@ export async function updateReminderStatus({ accessToken, reminderId, status }) 
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(payload),
     });
   } catch {
     throw new Error("Unable to reach reminder service. Please try again.");
@@ -244,6 +269,162 @@ export async function updateReminderStatus({ accessToken, reminderId, status }) 
   return json?.data ?? null;
 }
 
+export async function fetchBeneficiaries({ accessToken }) {
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/v1/beneficiaries`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+  } catch {
+    throw new Error("Unable to reach beneficiary service. Please try again.");
+  }
+
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = {};
+  }
+
+  if (!response.ok) {
+    const { message, code } = extractErrorInfo(payload, "Unable to fetch beneficiaries.");
+    const error = new Error(message);
+    if (code) error.code = code;
+    throw error;
+  }
+  return payload?.data ?? [];
+}
+
+export async function createBeneficiary({ accessToken, payload }) {
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/v1/beneficiaries`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    throw new Error("Unable to reach beneficiary service. Please try again.");
+  }
+
+  let json;
+  try {
+    json = await response.json();
+  } catch {
+    json = {};
+  }
+
+  if (!response.ok) {
+    const { message, code } = extractErrorInfo(json, "Unable to add beneficiary.");
+    const error = new Error(message);
+    if (code) error.code = code;
+    throw error;
+  }
+  return json?.data ?? null;
+}
+
+export async function deleteBeneficiary({ accessToken, beneficiaryId }) {
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/v1/beneficiaries/${beneficiaryId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+  } catch {
+    throw new Error("Unable to reach beneficiary service. Please try again.");
+  }
+
+  let json;
+  try {
+    json = await response.json();
+  } catch {
+    json = {};
+  }
+
+  if (!response.ok) {
+    const { message, code } = extractErrorInfo(json, "Unable to remove beneficiary.");
+    const error = new Error(message);
+    if (code) error.code = code;
+    throw error;
+  }
+  return json?.data ?? null;
+}
+
+export async function listDeviceBindings({ accessToken }) {
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/device-bindings`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const { message, code } = extractErrorInfo(payload, "Unable to load device bindings.");
+    const error = new Error(message);
+    if (code) error.code = code;
+    throw error;
+  }
+  return payload?.data ?? [];
+}
+
+export async function registerDeviceBinding({
+  accessToken,
+  deviceIdentifier,
+  fingerprintHash,
+  platform,
+  deviceLabel,
+  registrationMethod,
+  voiceSampleBlob,
+}) {
+  const formData = new FormData();
+  formData.append("deviceIdentifier", deviceIdentifier);
+  formData.append("fingerprintHash", fingerprintHash);
+  if (platform) formData.append("platform", platform);
+  if (deviceLabel) formData.append("deviceLabel", deviceLabel);
+  if (registrationMethod) formData.append("registrationMethod", registrationMethod);
+  if (voiceSampleBlob) {
+    formData.append("voiceSample", voiceSampleBlob, "device-binding.wav");
+  }
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/device-bindings`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: formData,
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const { message, code } = extractErrorInfo(json, "Unable to register device binding.");
+    const error = new Error(message);
+    if (code) error.code = code;
+    throw error;
+  }
+  return json?.data ?? null;
+}
+
+export async function revokeDeviceBinding({ accessToken, bindingId }) {
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/device-bindings/${bindingId}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const { message, code } = extractErrorInfo(json, "Unable to revoke device binding.");
+    const error = new Error(message);
+    if (code) error.code = code;
+    throw error;
+  }
+  return json?.data ?? null;
+}
+
 export default {
   authenticateUser,
   fetchAccounts,
@@ -253,6 +434,9 @@ export default {
   fetchReminders,
   createReminder,
   updateReminderStatus,
+  listDeviceBindings,
+  registerDeviceBinding,
+  revokeDeviceBinding,
 };
 
 

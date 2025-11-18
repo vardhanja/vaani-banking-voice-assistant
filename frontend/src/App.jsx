@@ -7,6 +7,9 @@ import Login from "./pages/Login.jsx";
 import Profile from "./pages/Profile.jsx";
 import Transactions from "./pages/Transactions.jsx";
 import Reminders from "./pages/Reminders.jsx";
+import DeviceBinding from "./pages/DeviceBinding.jsx";
+import SignInHelp from "./pages/SignInHelp.jsx";
+import Beneficiaries from "./pages/Beneficiaries.jsx";
 import { authenticateUser } from "./api/client.js";
 
 const mockProfile = {
@@ -45,19 +48,47 @@ const App = () => {
     accessToken: null,
     expiresAt: null,
     meta: null,
+    detail: null,
   });
 
-  const authenticate = async ({ userId, password }) => {
+  const authenticate = async ({
+    userId,
+    password,
+    authMode,
+    otp,
+    deviceIdentifier,
+    deviceFingerprint,
+    platform,
+    deviceLabel,
+    voiceSampleBlob,
+    validateOnly = false,
+  }) => {
     if (!userId || userId.length < 4) {
       return { success: false, message: "Enter a valid User ID." };
     }
 
-    const loginResult = await authenticateUser({ userId, password });
-    if (!loginResult.success || !loginResult.profile) {
+    const loginResult = await authenticateUser({
+      userId,
+      password: authMode === "password" ? password : "",
+      deviceIdentifier,
+      deviceFingerprint,
+      platform,
+      deviceLabel,
+      registrationMethod: authMode === "voice" ? "otp+voice" : "password",
+      voiceSampleBlob,
+      loginMode: authMode,
+      otp,
+      validateOnly,
+    });
+    if (!loginResult.success || (!validateOnly && !loginResult.profile)) {
       return {
         success: false,
         message: loginResult.message || "Invalid user ID or password.",
       };
+    }
+
+    if (validateOnly) {
+      return { success: true };
     }
 
     if (!loginResult.profile) {
@@ -74,12 +105,20 @@ const App = () => {
     const expiresAt = loginResult.expiresIn
       ? Date.now() + Number(loginResult.expiresIn) * 1000
       : null;
+    if (authMode === "voice") {
+      try {
+        window.localStorage.setItem(`voiceEnrolled:${userId}`, "true");
+      } catch (storageError) {
+        console.warn("Unable to persist voice enrollment flag", storageError);
+      }
+    }
     setSession({
       authenticated: true,
       user: persona,
       accessToken: loginResult.accessToken ?? null,
       expiresAt,
       meta: loginResult.meta ?? null,
+      detail: loginResult.detail ?? null,
     });
     navigate("/profile", { replace: true });
     return { success: true };
@@ -92,6 +131,7 @@ const App = () => {
       accessToken: null,
       expiresAt: null,
       meta: null,
+      detail: null,
     });
     navigate("/", { replace: true });
   };
@@ -111,6 +151,7 @@ const App = () => {
             <Profile
               user={session.user}
               accessToken={session.accessToken}
+              sessionDetail={session.detail}
               onSignOut={signOut}
             />
           ) : (
@@ -137,6 +178,30 @@ const App = () => {
             <Navigate to="/" replace />
           )
         }
+      />
+      <Route
+        path="/beneficiaries"
+        element={
+          session.authenticated ? (
+            <Beneficiaries session={session} onSignOut={signOut} />
+          ) : (
+            <Navigate to="/" replace />
+          )
+        }
+      />
+      <Route
+        path="/device-binding"
+        element={
+          session.authenticated ? (
+            <DeviceBinding session={session} onSignOut={signOut} />
+          ) : (
+            <Navigate to="/" replace />
+          )
+        }
+      />
+      <Route
+        path="/sign-in-help"
+        element={<SignInHelp onBack={() => navigate(-1)} />}
       />
       <Route path="*" element={<Navigate to={session.authenticated ? "/profile" : "/"} replace />} />
     </Routes>

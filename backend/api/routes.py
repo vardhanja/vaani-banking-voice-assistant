@@ -6,22 +6,35 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import hashlib
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status, File, UploadFile, Form
 
 from ..db.services.auth import AuthService
 from ..db.services.banking import BankingService
+from ..db.services.device_binding import DeviceBindingService
+from ..db.services.voice_verification import VoiceVerificationService
 from ..db.utils.enums import ReminderStatus, ReminderType, TransactionChannel
-from .dependencies import AuthServiceDep, BankingServiceDep
+from .dependencies import (
+    AuthServiceDep,
+    BankingServiceDep,
+    DeviceBindingServiceDep,
+    VoiceVerificationServiceDep,
+)
 from .schemas import (
     AccountBalanceData,
     AccountBalanceResponse,
     AccountItem,
     AccountListResponse,
+    BranchInfo,
     ErrorDetail,
     ErrorResponse,
     LoginData,
-    LoginRequest,
     LoginResponse,
+    DeviceBindingListResponse,
+    DeviceBindingResponse,
+    DeviceBindingResource,
     ReminderCreateRequest,
     ReminderListResponse,
     ReminderResource,
@@ -33,6 +46,10 @@ from .schemas import (
     TransferRequest,
     TransferResponse,
     UserProfile,
+    BeneficiaryCreateRequest,
+    BeneficiaryListResponse,
+    BeneficiaryResource,
+    BeneficiaryResponse,
 )
 from .security import CurrentSessionDep, RequestContext, RequestContextDep
 
@@ -56,9 +73,10 @@ def raise_http_error(
     *,
     code: str,
     status_code: int = status.HTTP_400_BAD_REQUEST,
+    info: Optional[dict] = None,
 ) -> None:
     meta = build_meta(ctx)
-    detail = ErrorDetail(code=code, message=message)
+    detail = ErrorDetail(code=code, message=message, info=info)
     payload = ErrorResponse(meta=meta, error=detail).model_dump(mode="json")
     raise HTTPException(
         status_code=status_code,
@@ -89,22 +107,99 @@ def serialize_reminder(reminder) -> ReminderResource:
     summary="Authenticate user credentials",
     tags=["Authentication"],
 )
-def login_v1(
-    payload: LoginRequest,
+async def login_v1(
+    userId: str = Form(...),
+    password: str = Form(...),
+    deviceIdentifier: Optional[str] = Form(None),
+    deviceFingerprint: Optional[str] = Form(None),
+    deviceLabel: Optional[str] = Form(None),
+    platform: Optional[str] = Form(None),
+    registrationMethod: Optional[str] = Form("otp+voice"),
+    voiceSample: UploadFile | None = File(None),
+    loginMode: str = Form("password"),
+    otp: Optional[str] = Form(None),
+    validateOnly: str = Form("false"),
     ctx: RequestContext = RequestContextDep,
     auth_service: AuthService = AuthServiceDep,
 ):
+    voice_bytes = await voiceSample.read() if voiceSample else None
+    validate_only_flag = str(validateOnly).lower() in {"true", "1", "yes", "on"}
+
+    if not validate_only_flag:
+        if not otp:
+            raise_http_error(
+                ctx,
+                message="One-time password required.",
+                code="otp_required",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        if otp != "12345":
+            raise_http_error(
+                ctx,
+                message="Invalid one-time password.",
+                code="otp_invalid",
+                status_code=status.HTTP_401_UNAUTHORIZED,
+            )
+
     result = auth_service.authenticate(
-        customer_number=payload.userId,
-        password=payload.password,
+        customer_number=userId,
+        password=password,
+        device_identifier=deviceIdentifier,
+        fingerprint_hash=deviceFingerprint,
+        platform=platform,
+        device_label=deviceLabel,
+        voice_sample=voice_bytes,
+        registration_method=registrationMethod or "otp+voice",
+        login_mode=loginMode,
+        validate_only=validate_only_flag,
     )
 
+    message_map = {
+        "invalid_credentials": "Invalid user ID or password.",
+        "device_binding_required": "Device binding required before continuing.",
+        "device_verification_required": "Verify this device to continue.",
+        "voice_verification_required": "Please complete voice verification to continue.",
+        "voice_enrollment_required": "Please enroll your voice signature to continue.",
+        "voice_mismatch": "Voice sample did not match our records.",
+        "voice_sample_invalid": "Voice sample was too short or unclear. Please record again.",
+    }
+
+    if validate_only_flag:
+        if not result.success:
+            reason = result.reason or "invalid_credentials"
+            message = message_map.get(reason, "Authentication failed.")
+            raise_http_error(
+                ctx,
+                message=message,
+                code=reason,
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                info=result.detail,
+            )
+        return LoginResponse(
+            meta=build_meta(ctx),
+            data=LoginData(
+                accessToken="",
+                expiresIn=0,
+                profile=UserProfile(
+                    customerId=userId,
+                    fullName="",
+                    segment="",
+                    branch=BranchInfo(name="", city=""),
+                    accountSummary=[],
+                ),
+                detail=result.detail,
+            ),
+        )
+
     if not result.success or result.user_profile is None or result.access_token is None:
+        reason = result.reason or "invalid_credentials"
+        message = message_map.get(reason, "Authentication failed.")
         raise_http_error(
             ctx,
-            message="Invalid user ID or password.",
-            code="invalid_credentials",
+            message=message,
+            code=reason,
             status_code=status.HTTP_401_UNAUTHORIZED,
+            info=result.detail,
         )
 
     profile = UserProfile(**result.user_profile)
@@ -113,8 +208,103 @@ def login_v1(
         accessToken=result.access_token,
         expiresIn=result.expires_in or 0,
         profile=profile,
+        detail=result.detail,
     )
     return LoginResponse(meta=meta, data=data)
+
+
+@router.get(
+    "/auth/device-bindings",
+    response_model=DeviceBindingListResponse,
+    summary="List trusted devices for the authenticated user",
+    tags=["Authentication"],
+)
+def list_device_bindings_v1(
+    ctx: RequestContext = RequestContextDep,
+    session=CurrentSessionDep,
+    device_binding_service: DeviceBindingService = DeviceBindingServiceDep,
+):
+    bindings = device_binding_service.list_bindings(user_id=session.user_id)
+    meta = build_meta(ctx)
+    resources = [DeviceBindingResource(**binding) for binding in bindings]
+    return DeviceBindingListResponse(meta=meta, data=resources)
+
+
+@router.post(
+    "/auth/device-bindings",
+    response_model=DeviceBindingResponse,
+    summary="Register or refresh a trusted device binding",
+    status_code=status.HTTP_201_CREATED,
+    tags=["Authentication"],
+)
+async def create_device_binding_v1(
+    deviceIdentifier: str = Form(...),
+    fingerprintHash: str = Form(...),
+    registrationMethod: Optional[str] = Form("otp+voice"),
+    platform: Optional[str] = Form(None),
+    deviceLabel: Optional[str] = Form(None),
+    voiceSample: UploadFile | None = File(None),
+    ctx: RequestContext = RequestContextDep,
+    session=CurrentSessionDep,
+    device_binding_service: DeviceBindingService = DeviceBindingServiceDep,
+    voice_verifier: VoiceVerificationService = VoiceVerificationServiceDep,
+):
+    voice_bytes = await voiceSample.read() if voiceSample else None
+    if voice_bytes is None:
+        raise_http_error(
+            ctx,
+            message="Voice sample required to register this device.",
+            code="voice_sample_missing",
+        )
+    voice_hash = hashlib.sha256(voice_bytes).hexdigest() if voice_bytes else None
+    voice_vector = None
+    if voice_bytes:
+        embedding = voice_verifier.compute_embedding(voice_bytes)
+        if embedding is None:
+            raise_http_error(
+                ctx,
+                message="Voice sample too short or unclear. Please record again.",
+                code="voice_sample_invalid",
+            )
+        voice_vector = voice_verifier.serialize_embedding(embedding)
+    binding = device_binding_service.register_or_refresh_binding(
+        user_id=session.user_id,
+        device_identifier=deviceIdentifier,
+        fingerprint_hash=fingerprintHash,
+        platform=platform,
+        device_label=deviceLabel,
+        registration_method=registrationMethod or "otp+voice",
+        voice_signature_hash=voice_hash,
+        voice_signature_vector=voice_vector,
+    )
+    meta = build_meta(ctx)
+    resource = DeviceBindingResource(**binding)
+    return DeviceBindingResponse(meta=meta, data=resource)
+
+
+@router.delete(
+    "/auth/device-bindings/{binding_id}",
+    response_model=DeviceBindingResponse,
+    summary="Revoke a trusted device binding",
+    tags=["Authentication"],
+)
+def revoke_device_binding_v1(
+    binding_id: str,
+    ctx: RequestContext = RequestContextDep,
+    session=CurrentSessionDep,
+    device_binding_service: DeviceBindingService = DeviceBindingServiceDep,
+):
+    binding = device_binding_service.revoke_binding(binding_id=binding_id)
+    if binding is None:
+        raise_http_error(
+            ctx,
+            message="Device binding not found.",
+            code="device_binding_not_found",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+    meta = build_meta(ctx)
+    resource = DeviceBindingResource(**binding)
+    return DeviceBindingResponse(meta=meta, data=resource)
 
 
 @router.get(
@@ -248,6 +438,8 @@ def create_internal_transfer(
                 code="invalid_destination_account",
             )
 
+        reference_id = payload.referenceId or uuid.uuid4().hex[:12].upper()
+
         result = banking_service.transfer_between_accounts(
             source_account_number=source_account["accountNumber"],
             destination_account_number=destination_account_number,
@@ -255,8 +447,9 @@ def create_internal_transfer(
             currency_code=payload.currency,
             description=payload.remarks,
             channel=TransactionChannel.VOICE,
+            user_id=session.user_id,
             session_id=session.session_id,
-            reference_id=payload.referenceId,
+            reference_id=reference_id,
         )
     except ValueError as exc:
         message = str(exc)
@@ -281,6 +474,98 @@ def create_internal_transfer(
     )
     meta = build_meta(ctx)
     return TransferResponse(meta=meta, data=receipt)
+
+
+@router.get(
+    "/beneficiaries",
+    response_model=BeneficiaryListResponse,
+    tags=["Beneficiaries"],
+    summary="List registered beneficiaries",
+)
+def list_beneficiaries_v1(
+    ctx: RequestContext = RequestContextDep,
+    session=CurrentSessionDep,
+    banking_service: BankingService = BankingServiceDep,
+):
+    beneficiaries = banking_service.list_beneficiaries(user_id=session.user_id)
+    resources = [BeneficiaryResource(**item) for item in beneficiaries]
+    meta = build_meta(ctx)
+    return BeneficiaryListResponse(meta=meta, data=resources)
+
+
+@router.post(
+    "/beneficiaries",
+    response_model=BeneficiaryResponse,
+    tags=["Beneficiaries"],
+    summary="Register a new beneficiary",
+    status_code=status.HTTP_201_CREATED,
+)
+def create_beneficiary_v1(
+    payload: BeneficiaryCreateRequest,
+    ctx: RequestContext = RequestContextDep,
+    session=CurrentSessionDep,
+    banking_service: BankingService = BankingServiceDep,
+):
+    try:
+        beneficiary = banking_service.add_beneficiary(
+            user_id=session.user_id,
+            display_name=payload.name,
+            account_number=payload.accountNumber,
+            bank_name=payload.bankName,
+            ifsc=payload.ifsc,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        if message == "account_not_found":
+            raise_http_error(
+                ctx,
+                message="The destination account could not be found.",
+                code="account_not_found",
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+        if message == "beneficiary_exists":
+            raise_http_error(
+                ctx,
+                message="This account is already present in your beneficiary list.",
+                code="beneficiary_exists",
+                status_code=status.HTTP_409_CONFLICT,
+            )
+        raise_http_error(
+            ctx,
+            message="Unable to add beneficiary at the moment.",
+            code="beneficiary_creation_failed",
+        )
+
+    meta = build_meta(ctx)
+    resource = BeneficiaryResource(**beneficiary)
+    return BeneficiaryResponse(meta=meta, data=resource)
+
+
+@router.delete(
+    "/beneficiaries/{beneficiary_id}",
+    response_model=BeneficiaryResponse,
+    tags=["Beneficiaries"],
+    summary="Remove a beneficiary",
+)
+def delete_beneficiary_v1(
+    beneficiary_id: str,
+    ctx: RequestContext = RequestContextDep,
+    session=CurrentSessionDep,
+    banking_service: BankingService = BankingServiceDep,
+):
+    beneficiary = banking_service.remove_beneficiary(
+        user_id=session.user_id, beneficiary_id=beneficiary_id
+    )
+    if beneficiary is None:
+        raise_http_error(
+            ctx,
+            message="Beneficiary not found.",
+            code="beneficiary_not_found",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+    meta = build_meta(ctx)
+    resource = BeneficiaryResource(**beneficiary)
+    return BeneficiaryResponse(meta=meta, data=resource)
 
 
 @router.get(

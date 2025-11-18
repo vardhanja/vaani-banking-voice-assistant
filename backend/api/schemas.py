@@ -39,8 +39,33 @@ class LoginRequest(BaseModel):
     userId: constr(min_length=4, max_length=32) = Field(
         description="Customer identifier issued by Sun National Bank."
     )
-    password: constr(min_length=4, max_length=128) = Field(
-        description="Secret shared during onboarding or updated by customer."
+    password: constr(min_length=0, max_length=128) = Field(
+        description="Secret shared during onboarding or updated by customer. Optional when using voice mode."
+    )
+    deviceIdentifier: Optional[constr(min_length=4, max_length=128)] = Field(
+        default=None,
+        description="Stable identifier for the customer device (hashed fingerprint).",
+    )
+    deviceFingerprint: Optional[constr(min_length=8, max_length=256)] = Field(
+        default=None,
+        description="Additional device fingerprint or browser signature hash.",
+    )
+    deviceLabel: Optional[constr(max_length=120)] = Field(
+        default=None, description="Friendly label shown to the customer."
+    )
+    platform: Optional[constr(max_length=40)] = Field(
+        default=None, description="Platform or operating system (e.g., ios, android, web)."
+    )
+    registrationMethod: Optional[constr(max_length=40)] = Field(
+        default="otp+voice",
+        description="Method used to confirm device binding (otp, otp+voice, etc.).",
+    )
+    loginMode: constr(min_length=4, max_length=16) = Field(
+        default="password",
+        description="Mode chosen by customer (password or voice).",
+    )
+    otp: constr(min_length=4, max_length=10) = Field(
+        description="One-time password provided during step-up verification."
     )
 
 
@@ -77,6 +102,7 @@ class LoginData(BaseModel):
     tokenType: str = "Bearer"
     expiresIn: int
     profile: UserProfile
+    detail: Optional[dict] = None
 
 
 class LoginResponse(BaseModel):
@@ -217,6 +243,72 @@ class ReminderListResponse(BaseModel):
     data: List[ReminderResource]
 
 
+class BeneficiaryResource(BaseModel):
+    id: str
+    name: str
+    accountNumber: str
+    bankName: str
+    ifsc: str
+    status: str
+    addedAt: datetime
+    verifiedAt: Optional[datetime] = None
+    lastUsedAt: Optional[datetime] = None
+    removedAt: Optional[datetime] = None
+
+
+class BeneficiaryCreateRequest(BaseModel):
+    name: constr(min_length=2, max_length=120)
+    accountNumber: constr(min_length=10, max_length=32)
+    bankName: Optional[constr(max_length=120)] = None
+    ifsc: Optional[constr(min_length=4, max_length=16)] = None
+
+
+class BeneficiaryListResponse(BaseModel):
+    meta: ResponseMeta
+    data: List[BeneficiaryResource]
+
+
+class BeneficiaryResponse(BaseModel):
+    meta: ResponseMeta
+    data: BeneficiaryResource
+
+
+# --- Device Binding -------------------------------------------------------------
+
+
+class DeviceBindingResource(BaseModel):
+    id: str
+    deviceIdentifier: str
+    registrationMethod: str
+    platform: Optional[str] = None
+    deviceLabel: Optional[str] = None
+    trustLevel: str
+    voiceSignaturePresent: bool
+    lastVerifiedAt: Optional[datetime] = None
+    revokedAt: Optional[datetime] = None
+    createdAt: Optional[datetime] = None
+    updatedAt: Optional[datetime] = None
+
+
+class DeviceBindingCreateRequest(BaseModel):
+    deviceIdentifier: constr(min_length=4, max_length=128)
+    fingerprintHash: constr(min_length=8, max_length=256)
+    registrationMethod: Optional[constr(max_length=40)] = "otp+voice"
+    platform: Optional[constr(max_length=40)] = None
+    deviceLabel: Optional[constr(max_length=120)] = None
+    voiceSignatureHash: Optional[constr(min_length=8, max_length=256)] = None
+
+
+class DeviceBindingResponse(BaseModel):
+    meta: ResponseMeta
+    data: DeviceBindingResource
+
+
+class DeviceBindingListResponse(BaseModel):
+    meta: ResponseMeta
+    data: List[DeviceBindingResource]
+
+
 __all__ = [
     "ResponseMeta",
     "ErrorDetail",
@@ -238,4 +330,8 @@ __all__ = [
     "ReminderStatusUpdateRequest",
     "ReminderResponse",
     "ReminderListResponse",
+    "DeviceBindingCreateRequest",
+    "DeviceBindingResponse",
+    "DeviceBindingListResponse",
+    "DeviceBindingResource",
 ]

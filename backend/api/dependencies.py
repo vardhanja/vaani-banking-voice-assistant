@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 from ..db import (
     AuthService,
     BankingService,
+    DeviceBindingService,
+    VoiceVerificationService,
     DatabaseConfig,
     create_db_engine,
     get_session_factory,
@@ -42,7 +44,8 @@ def get_session() -> Generator[Session, None, None]:
 @lru_cache
 def get_auth_service() -> AuthService:
     factory = get_session_factory_cached()
-    return AuthService(factory)
+    voice_service = get_voice_verification_service()
+    return AuthService(factory, voice_service)
 
 
 @lru_cache
@@ -51,10 +54,29 @@ def get_banking_service() -> BankingService:
     return BankingService(factory)
 
 
+@lru_cache
+def get_device_binding_service() -> DeviceBindingService:
+    factory = get_session_factory_cached()
+    return DeviceBindingService(factory)
+
+
+@lru_cache
+def get_voice_verification_service() -> VoiceVerificationService:
+    return VoiceVerificationService()
+
+
 AuthServiceDep = Depends(get_auth_service)
 BankingServiceDep = Depends(get_banking_service)
+DeviceBindingServiceDep = Depends(get_device_binding_service)
+VoiceVerificationServiceDep = Depends(get_voice_verification_service)
 
 
-__all__ = ["AuthServiceDep", "BankingServiceDep", "get_session"]
+__all__ = [
+    "AuthServiceDep",
+    "BankingServiceDep",
+    "DeviceBindingServiceDep",
+    "VoiceVerificationServiceDep",
+    "get_session",
+]
 
 

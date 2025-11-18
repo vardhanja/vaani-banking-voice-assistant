@@ -26,10 +26,12 @@ from .models import (
     Account,
     Branch,
     Card,
+    DeviceBinding,
     Reminder,
     Session,
     Transaction,
     User,
+    Beneficiary,
 )
 from .utils.enums import (
     AccountStatus,
@@ -37,12 +39,14 @@ from .utils.enums import (
     AuthenticationLevel,
     CardStatus,
     CardType,
+    DeviceTrustLevel,
     ReminderStatus,
     ReminderType,
     SessionStatus,
     TransactionChannel,
     TransactionStatus,
     TransactionType,
+    BeneficiaryStatus,
 )
 from .utils.security import hash_password
 
@@ -172,6 +176,25 @@ def _create_session_for_user(session, user: User, fake: Faker) -> Session:
     return voice_session
 
 
+def _create_device_binding(session, *, user: User, fake: Faker):
+    binding = DeviceBinding(
+        user_id=user.id,
+        device_identifier=fake.md5(raw_output=False),
+        fingerprint_hash=fake.sha1(raw_output=False),
+        voice_signature_hash=fake.sha1(raw_output=False),
+        voice_signature_vector=None,
+        registration_method="seeded",
+        platform=random.choice(["android", "ios", "web"]),
+        device_label=random.choice(
+            ["Primary Phone", "Home Laptop", "Village CSC Kiosk", "Family Tablet"]
+        ),
+        trust_level=DeviceTrustLevel.TRUSTED,
+        last_verified_at=datetime.now(ZoneInfo("Asia/Kolkata"))
+        - timedelta(days=random.randint(0, 10)),
+    )
+    session.add(binding)
+
+
 def _create_card_for_account(session, user: User, account: Account, fake: Faker) -> Card:
     masked = f"XXXX-XXXX-XXXX-{fake.random_number(digits=4, fix_len=True)}"
     card = Card(
@@ -247,6 +270,39 @@ def _create_reminder(session, *, user: User, account: Account, fake: Faker):
     session.add(reminder)
 
 
+def _create_beneficiaries(
+    session,
+    *,
+    user: User,
+    candidate_accounts: list[Account],
+    fake: Faker,
+):
+    if not candidate_accounts:
+        return
+
+    available_accounts = [
+        account for account in candidate_accounts if account.user_id != user.id
+    ]
+    if not available_accounts:
+        return
+
+    now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    sample_size = min(len(available_accounts), random.randint(1, 3))
+    for account in random.sample(available_accounts, sample_size):
+        beneficiary = Beneficiary(
+            user_id=user.id,
+            account_id=account.id,
+            display_name=fake.name(),
+            account_number=account.account_number,
+            bank_name=account.branch.name if account.branch else "Sun National Bank",
+            ifsc_code=account.branch.ifsc_code if account.branch else "SUNB0000000",
+            status=BeneficiaryStatus.ACTIVE,
+            added_at=now,
+            verified_at=now,
+        )
+        session.add(beneficiary)
+
+
 def seed_database(user_count: int = 100):
     """Entry point for seeding the database."""
 
@@ -266,6 +322,7 @@ def seed_database(user_count: int = 100):
             return
 
         branches = _ensure_branches(session)
+        account_registry: list[Account] = []
 
         for idx in range(user_count):
             branch = branches[BRANCH_DEFINITIONS[idx % len(BRANCH_DEFINITIONS)]["code"]]
@@ -298,9 +355,11 @@ def seed_database(user_count: int = 100):
             accounts = _create_accounts_for_user(
                 session, user=user, branch=branch, fake=fake, sequence_seed=idx * 10
             )
+            account_registry.extend(accounts)
 
             voice_session = _create_session_for_user(session, user=user, fake=fake)
             user.last_login_at = voice_session.started_at
+            _create_device_binding(session, user=user, fake=fake)
 
             for account in accounts:
                 _create_transactions_for_account(
@@ -308,6 +367,13 @@ def seed_database(user_count: int = 100):
                 )
                 _create_card_for_account(session, user=user, account=account, fake=fake)
                 _create_reminder(session, user=user, account=account, fake=fake)
+
+            _create_beneficiaries(
+                session,
+                user=user,
+                candidate_accounts=account_registry,
+                fake=fake,
+            )
 
         print(f"Seeded {user_count} customers successfully.")
 

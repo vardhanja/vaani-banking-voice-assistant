@@ -11,6 +11,7 @@ import {
   fetchReminders,
   createReminder,
   updateReminderStatus,
+  fetchBeneficiaries,
 } from "../api/client.js";
 
 const formatDateTime = (value) => {
@@ -39,7 +40,7 @@ const parseBalanceString = (value) => {
   return Number.isNaN(amount) ? null : amount;
 };
 
-const PANEL_KEYS = ["balance", "transfer", "transactions", "reminders"];
+const PANEL_KEYS = ["balance", "transfer", "transactions", "reminders", "beneficiaries"];
 const SESSION_EXPIRY_CODES = new Set([
   "session_timeout",
   "session_expired",
@@ -47,7 +48,7 @@ const SESSION_EXPIRY_CODES = new Set([
   "session_invalid",
 ]);
 
-const Profile = ({ user, accessToken, onSignOut }) => {
+const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
   const navigate = useNavigate();
 
   const [panels, setPanels] = useState({
@@ -55,6 +56,7 @@ const Profile = ({ user, accessToken, onSignOut }) => {
     transfer: false,
     transactions: false,
     reminders: false,
+    beneficiaries: false,
   });
 
   const [accounts, setAccounts] = useState([]);
@@ -76,6 +78,7 @@ const Profile = ({ user, accessToken, onSignOut }) => {
   const [transferForm, setTransferForm] = useState({
     sourceAccountId: "",
     destinationAccountNumber: "",
+    beneficiaryId: "",
     amount: "",
     remarks: "",
   });
@@ -94,6 +97,16 @@ const Profile = ({ user, accessToken, onSignOut }) => {
     recurrenceRule: "",
   });
   const [reminderStatus, setReminderStatus] = useState(null);
+
+  const [beneficiaries, setBeneficiaries] = useState([]);
+  const [beneficiariesLoading, setBeneficiariesLoading] = useState(false);
+  const [beneficiariesError, setBeneficiariesError] = useState("");
+
+  const bindingDetail = sessionDetail ?? {};
+  const deviceBindingRequired = Boolean(bindingDetail.deviceBindingRequired);
+  const voiceEnrollmentRequired = Boolean(bindingDetail.voiceEnrollmentRequired);
+  const voiceReverificationRequired = Boolean(bindingDetail.voiceReverificationRequired);
+  const voicePhrase = bindingDetail.voicePhrase ?? "Sun Bank hai mera saathi";
 
   const handleSessionExpiry = useCallback(
     (error, setter) => {
@@ -164,6 +177,33 @@ const Profile = ({ user, accessToken, onSignOut }) => {
     };
   }, [accessToken, handleSessionExpiry]);
 
+  useEffect(() => {
+    if (!accessToken) {
+      return;
+    }
+    let isMounted = true;
+    setBeneficiariesLoading(true);
+    setBeneficiariesError("");
+    fetchBeneficiaries({ accessToken })
+      .then((data) => {
+        if (!isMounted) return;
+        setBeneficiaries(data);
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        if (handleSessionExpiry(error, setBeneficiariesError)) return;
+        setBeneficiariesError(error.message);
+      })
+      .finally(() => {
+        if (isMounted) {
+          setBeneficiariesLoading(false);
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [accessToken, handleSessionExpiry]);
+
   const accountsByNumber = useMemo(() => {
     const map = new Map();
     accounts.forEach((account) => {
@@ -212,6 +252,18 @@ const Profile = ({ user, accessToken, onSignOut }) => {
     [accountCards],
   );
 
+  const beneficiaryOptions = useMemo(
+    () =>
+      beneficiaries
+        .filter((item) => item.status !== "blocked")
+        .map((item) => ({
+          id: item.id,
+          name: item.name,
+          accountNumber: item.accountNumber,
+        })),
+    [beneficiaries],
+  );
+
   useEffect(() => {
     if (!accountOptions.length) return;
     const current =
@@ -244,6 +296,13 @@ const Profile = ({ user, accessToken, onSignOut }) => {
       return next;
     });
   }, [accountCards]);
+
+  useEffect(() => {
+    if (!transferForm.beneficiaryId) return;
+    if (!beneficiaryOptions.some((option) => option.id === transferForm.beneficiaryId)) {
+      setTransferForm((prev) => ({ ...prev, beneficiaryId: "" }));
+    }
+  }, [beneficiaryOptions, transferForm.beneficiaryId]);
 
   const handlePanelToggle = (panel) => {
     const isOpening = !panels[panel];
@@ -325,6 +384,23 @@ const Profile = ({ user, accessToken, onSignOut }) => {
 
   const handleTransferChange = (event) => {
     const { name, value } = event.target;
+    if (name === "beneficiaryId") {
+      const selected = beneficiaryOptions.find((option) => option.id === value);
+      setTransferForm((prev) => ({
+        ...prev,
+        beneficiaryId: value,
+        destinationAccountNumber: selected ? selected.accountNumber : "",
+      }));
+      return;
+    }
+    if (name === "destinationAccountNumber") {
+      setTransferForm((prev) => ({
+        ...prev,
+        beneficiaryId: "",
+        destinationAccountNumber: value,
+      }));
+      return;
+    }
     setTransferForm((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -333,6 +409,18 @@ const Profile = ({ user, accessToken, onSignOut }) => {
     if (!accessToken) return;
     if (!transferForm.sourceAccountId) {
       setTransferStatus({ type: "error", message: "Select a source account." });
+      return;
+    }
+
+    const destinationAccountNumber = transferForm.destinationAccountNumber.trim();
+    if (!destinationAccountNumber) {
+      setTransferStatus({ type: "error", message: "Enter a destination account number." });
+      return;
+    }
+
+    const transferAmount = Number(transferForm.amount);
+    if (!Number.isFinite(transferAmount) || transferAmount <= 0) {
+      setTransferStatus({ type: "error", message: "Enter a valid transfer amount." });
       return;
     }
 
@@ -348,8 +436,8 @@ const Profile = ({ user, accessToken, onSignOut }) => {
         accessToken,
         payload: {
           sourceAccountId: transferForm.sourceAccountId,
-          destinationAccountNumber: transferForm.destinationAccountNumber,
-          amount: Number(transferForm.amount),
+          destinationAccountNumber,
+          amount: transferAmount,
           currency,
           remarks: transferForm.remarks || undefined,
         },
@@ -358,6 +446,7 @@ const Profile = ({ user, accessToken, onSignOut }) => {
       setTransferForm((prev) => ({
         ...prev,
         destinationAccountNumber: "",
+        beneficiaryId: "",
         amount: "",
         remarks: "",
       }));
@@ -454,6 +543,9 @@ const Profile = ({ user, accessToken, onSignOut }) => {
   const formattedReminder = formatDateTime(nextReminder?.date);
   const displayedAccounts = accountCards.slice(0, 5);
   const displayedReminders = reminders.slice(0, 5);
+  const displayedBeneficiaries = beneficiaries
+    .filter((item) => item.status !== "blocked")
+    .slice(0, 5);
 
   const canPerformActions =
     Boolean(accessToken) && accountOptions.length > 0 && !accountsLoading;
@@ -471,6 +563,30 @@ const Profile = ({ user, accessToken, onSignOut }) => {
             }
           />
           <main className="card-surface profile-surface">
+            {(deviceBindingRequired || voiceEnrollmentRequired || voiceReverificationRequired) && (
+              <section className="profile-card profile-card--span">
+                <div className="form-error">
+                  <p>
+                    {deviceBindingRequired
+                      ? "For secure banking, please bind this device and verify your voice."
+                      : voiceEnrollmentRequired
+                        ? "Complete voice signature enrollment to finish device binding."
+                        : "Please refresh your voice signature to keep this device trusted."}
+                  </p>
+                  <p className="profile-hint">
+                    Speak the passphrase: <strong>{voicePhrase}</strong>
+                  </p>
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => navigate("/device-binding")}
+                  >
+                    Manage device & voice binding
+                  </button>
+                </div>
+              </section>
+            )}
+
             <section className="profile-hero">
               <div>
                 <p className="profile-eyebrow">Logged in as</p>
@@ -622,6 +738,21 @@ const Profile = ({ user, accessToken, onSignOut }) => {
                   >
                     Manage reminders
                   </button>
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => handlePanelToggle("beneficiaries")}
+                    disabled={!canPerformActions}
+                  >
+                    Beneficiaries
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => navigate("/device-binding")}
+                  >
+                    Trusted devices
+                  </button>
                 </div>
               </article>
 
@@ -700,6 +831,24 @@ const Profile = ({ user, accessToken, onSignOut }) => {
                         required
                       />
                     </label>
+                    {beneficiaryOptions.length > 0 && (
+                      <label htmlFor="transfer-beneficiary">
+                        Saved beneficiary (optional)
+                        <select
+                          id="transfer-beneficiary"
+                          name="beneficiaryId"
+                          value={transferForm.beneficiaryId}
+                          onChange={handleTransferChange}
+                        >
+                          <option value="">Select beneficiary</option>
+                          {beneficiaryOptions.map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.name} · {option.accountNumber}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
                     <label htmlFor="transfer-amount">
                       Amount (INR)
                       <input
@@ -735,6 +884,50 @@ const Profile = ({ user, accessToken, onSignOut }) => {
                     >
                       {transferStatus.message}
                     </div>
+                  )}
+                </article>
+              )}
+
+              {panels.beneficiaries && (
+                <article id="panel-beneficiaries" className="profile-card profile-card--span">
+                  <h2>Beneficiaries</h2>
+                  {beneficiariesError && <div className="form-error">{beneficiariesError}</div>}
+                  {beneficiariesLoading && <p>Loading beneficiaries…</p>}
+                  {!beneficiariesLoading && !beneficiariesError && (
+                    <>
+                      {displayedBeneficiaries.length === 0 ? (
+                        <p className="profile-hint">
+                          No beneficiaries added yet. Add one to speed up transfers.
+                        </p>
+                      ) : (
+                        <ul className="beneficiary-mini-list">
+                          {displayedBeneficiaries.map((item) => (
+                            <li key={item.id} className="beneficiary-mini-list__item">
+                              <div>
+                                <p className="beneficiary-mini-list__name">{item.name}</p>
+                                <p className="beneficiary-mini-list__account">{item.accountNumber}</p>
+                                {(() => {
+                                  const lastUsed = formatDateTime(item.lastUsedAt);
+                                  if (!lastUsed) return null;
+                                  return (
+                                    <p className="beneficiary-mini-list__meta">Last used {lastUsed}</p>
+                                  );
+                                })()}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <div className="card-form__actions">
+                        <button
+                          type="button"
+                          className="secondary-btn"
+                          onClick={() => navigate("/beneficiaries")}
+                        >
+                          View all beneficiaries
+                        </button>
+                      </div>
+                    </>
                   )}
                 </article>
               )}
@@ -971,11 +1164,17 @@ Profile.propTypes = {
   }),
   accessToken: PropTypes.string,
   onSignOut: PropTypes.func.isRequired,
+  sessionDetail: PropTypes.shape({
+    deviceBindingRequired: PropTypes.bool,
+    voiceEnrollmentRequired: PropTypes.bool,
+    voiceReverificationRequired: PropTypes.bool,
+  }),
 };
 
 Profile.defaultProps = {
   user: null,
   accessToken: null,
+  sessionDetail: null,
 };
 
 export default Profile;

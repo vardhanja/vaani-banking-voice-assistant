@@ -51,6 +51,12 @@ class User(Base):
     sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
     cards = relationship("Card", back_populates="user", cascade="all, delete-orphan")
     reminders = relationship("Reminder", back_populates="user", cascade="all, delete-orphan")
+    device_bindings = relationship(
+        "DeviceBinding", back_populates="user", cascade="all, delete-orphan"
+    )
+    beneficiaries = relationship(
+        "Beneficiary", back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 __all__ = ["User"]
