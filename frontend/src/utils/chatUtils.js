@@ -1,6 +1,8 @@
 /**
  * Chat utility functions
  */
+import { getChatCopy } from "../config/chatCopy.js";
+import { DEFAULT_LANGUAGE } from "../config/voiceConfig.js";
 
 /**
  * Format a timestamp for chat messages
@@ -40,40 +42,45 @@ export const createMessage = (role, content) => {
 /**
  * Simulate AI response (placeholder for backend integration)
  * @param {string} userMessage - The user's message
+ * @param {string} language - Preferred language code
  * @returns {Promise<string>} AI response
  */
-export const simulateAIResponse = async (userMessage) => {
+export const simulateAIResponse = async (userMessage, language = DEFAULT_LANGUAGE) => {
   // Simulate network delay
   await new Promise(resolve => setTimeout(resolve, 1000));
   
   // Simple pattern matching for demo purposes
-  const message = userMessage.toLowerCase();
-  
-  if (message.includes('balance') || message.includes('check')) {
-    return "I can help you check your account balance. This feature will be fully functional once connected to the backend.";
+  const message = (userMessage || "").toLowerCase();
+  const copy = getChatCopy(language);
+  const fallback = copy?.fallbackResponses || getChatCopy(DEFAULT_LANGUAGE).fallbackResponses;
+
+  const includesAny = (phrases) => phrases.some((phrase) => message.includes(phrase));
+
+  if (includesAny(['balance', 'check', 'बैलेंस', 'खाता बैलेंस'])) {
+    return fallback.balance;
   }
-  
-  if (message.includes('transfer') || message.includes('send')) {
-    return "I can assist you with transferring funds. This feature will be available once backend integration is complete.";
+
+  if (includesAny(['transfer', 'send', 'ट्रांसफर', 'राशि ट्रांसफर', 'भेज'])) {
+    return fallback.transfer;
   }
-  
-  if (message.includes('transaction') || message.includes('history')) {
-    return "I can show you your transaction history. This will be connected to your actual transactions soon.";
+
+  if (includesAny(['transaction', 'history', 'लेनदेन', 'इतिहास'])) {
+    return fallback.transactions;
   }
-  
-  if (message.includes('reminder')) {
-    return "I can help you set up payment reminders. This feature will be enabled after backend integration.";
+
+  if (includesAny(['reminder', 'रिमाइंडर', 'याद दिल'])) {
+    return fallback.reminder;
   }
-  
-  if (message.includes('hello') || message.includes('hi') || message.includes('hey')) {
-    return "Hello! How can I assist you with your banking needs today?";
+
+  if (includesAny(['hello', 'hi', 'hey', 'नमस्ते', 'हैलो'])) {
+    return fallback.greeting;
   }
-  
-  if (message.includes('help')) {
-    return "I can help you with: checking balances, transferring funds, viewing transactions, and setting reminders. What would you like to do?";
+
+  if (includesAny(['help', 'मदद', 'सहायता'])) {
+    return fallback.help;
   }
-  
-  return "I understand your request. This feature will be connected to the backend soon to process your banking queries.";
+
+  return fallback.generic;
 };
 
 /**

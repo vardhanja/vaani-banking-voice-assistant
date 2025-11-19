@@ -4,8 +4,13 @@ import { createMessage, INITIAL_MESSAGE } from '../utils/chatUtils.js';
 /**
  * Hook for managing chat messages and auto-scrolling
  */
-export const useChatMessages = () => {
-  const [messages, setMessages] = useState([INITIAL_MESSAGE]);
+const createInitialAssistantMessage = (messageText) => {
+  const content = messageText || INITIAL_MESSAGE.content;
+  return createMessage('assistant', content);
+};
+
+export const useChatMessages = ({ initialMessage } = {}) => {
+  const [messages, setMessages] = useState(() => [createInitialAssistantMessage(initialMessage)]);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -15,6 +20,27 @@ export const useChatMessages = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    if (!initialMessage) return;
+
+    setMessages((prev) => {
+      if (
+        prev.length === 1 &&
+        prev[0].role === 'assistant' &&
+        prev[0].content !== initialMessage
+      ) {
+        return [
+          {
+            ...prev[0],
+            content: initialMessage,
+            timestamp: new Date(),
+          },
+        ];
+      }
+      return prev;
+    });
+  }, [initialMessage]);
 
   const addMessage = (role, content, statementData = null, structuredData = null) => {
     const message = createMessage(role, content);

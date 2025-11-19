@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import PropTypes from "prop-types";
 import TransactionTable from "./TransactionTable.jsx";
 import AccountBalanceCards from "./AccountBalanceCards.jsx";
@@ -8,6 +8,7 @@ import TransferFlow from "./TransferFlow.jsx";
 import TransferReceipt from "./TransferReceipt.jsx";
 import StatementRequestCard from "./StatementRequestCard.jsx";
 import ReminderManagerCard from "./ReminderManagerCard.jsx";
+import { getChatCopy } from "../../config/chatCopy.js";
 import "./ChatMessage.css";
 
 /**
@@ -15,6 +16,8 @@ import "./ChatMessage.css";
  */
 const ChatMessage = ({ message, userName, language = 'en-IN', session, onFeedback, onAddAssistantMessage }) => {
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const chatCopy = useMemo(() => getChatCopy(language), [language]);
+  const cardIntroMessages = chatCopy?.cardIntros || {};
   
   // Debug: Log message data to console
   if (message.role === 'assistant') {
@@ -88,6 +91,14 @@ const ChatMessage = ({ message, userName, language = 'en-IN', session, onFeedbac
     const num = Number(amount ?? 0);
     return num.toFixed(2);
   };
+
+  const trimmedContent = (message.content || '').trim();
+  const structuredType = message.structuredData?.type;
+  const fallbackCardIntro = (!trimmedContent && structuredType && cardIntroMessages[structuredType])
+    ? cardIntroMessages[structuredType]
+    : '';
+  const displayText = trimmedContent || fallbackCardIntro;
+  const shouldShowText = Boolean(displayText);
 
   const isDebitTransaction = (type = "") => {
     const lowered = type.toLowerCase();
@@ -305,9 +316,9 @@ const ChatMessage = ({ message, userName, language = 'en-IN', session, onFeedbac
           </span>
           <span className="chat-message__time">{formatTime(message.timestamp)}</span>
         </div>
-        {/* Only show text if content exists and is not just whitespace */}
-        {message.content && message.content.trim() && (
-          <div className="chat-message__text">{message.content}</div>
+        {/* Show assistant text or fallback narration for structured cards */}
+        {shouldShowText && (
+          <div className="chat-message__text">{displayText}</div>
         )}
         
         {/* Render structured data components */}

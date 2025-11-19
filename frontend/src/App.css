@@ -1,3 +1,94 @@
+.language-modal__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 27, 42, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+  padding: 1.5rem;
+}
+
+.language-modal {
+  background: #fff;
+  border-radius: 1.25rem;
+  width: min(480px, 100%);
+  padding: 2rem;
+  box-shadow: 0 25px 60px -20px rgba(15, 27, 42, 0.25);
+  position: relative;
+}
+
+.language-modal h2 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  font-size: 1.5rem;
+}
+
+.language-modal__subtitle {
+  margin: 0 0 1.5rem;
+  color: rgba(15, 27, 42, 0.75);
+}
+
+.language-modal__close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: transparent;
+  border: none;
+  font-size: 1.5rem;
+  color: rgba(15, 27, 42, 0.55);
+  cursor: pointer;
+}
+
+.language-modal__options {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.language-option {
+  border: 1px solid rgba(15, 27, 42, 0.1);
+  border-radius: 1rem;
+  padding: 1rem 1.25rem;
+  text-align: left;
+  background: #f7f9fb;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.language-option--active {
+  border-color: #ff7a59;
+  background: rgba(255, 122, 89, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 122, 89, 0.3);
+}
+
+.language-option__flag {
+  font-size: 1.5rem;
+}
+
+.language-option__label {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.language-option__description {
+  font-size: 0.9rem;
+  color: rgba(15, 27, 42, 0.8);
+}
+
+.language-modal__note {
+  font-size: 0.9rem;
+  color: rgba(15, 27, 42, 0.65);
+  margin-bottom: 1.5rem;
+}
+
+.language-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
 .app-shell {
   min-height: 100vh;
   display: flex;

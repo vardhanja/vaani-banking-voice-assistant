@@ -49,7 +49,7 @@ export const sendChatMessage = async ({
     console.log('Falling back to mock response');
     
     // Fallback to mock response if AI backend unavailable
-    const mockText = await simulateAIResponse(message);
+  const mockText = await simulateAIResponse(message);
     return {
       text: mockText,
       statementData: null,
