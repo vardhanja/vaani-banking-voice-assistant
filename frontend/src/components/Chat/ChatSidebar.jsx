@@ -1,81 +1,79 @@
 import PropTypes from "prop-types";
-import { getLanguageByCode } from "../../config/voiceConfig.js";
+import { DEFAULT_LANGUAGE, getLanguageByCode } from "../../config/voiceConfig.js";
+import { getChatCopy } from "../../config/chatCopy.js";
+
+const FALLBACK_COPY = getChatCopy(DEFAULT_LANGUAGE);
 
 /**
  * ChatSidebar component - Quick actions and voice status
  */
-const ChatSidebar = ({ isSpeechSupported, selectedLanguage, onQuickAction }) => {
+const ChatSidebar = ({ isSpeechSupported, selectedLanguage, onQuickAction, copy }) => {
   const currentLanguage = getLanguageByCode(selectedLanguage);
   const isComingSoon = currentLanguage?.comingSoon || false;
+  const localizedCopy = copy || FALLBACK_COPY;
+  const quickActions = localizedCopy.quickActions || [];
+  const recentTopics = localizedCopy.recentTopics || [];
+  const voiceFeatures = localizedCopy.voiceFeatures || FALLBACK_COPY.voiceFeatures;
 
   return (
     <aside className="chat-sidebar">
       <div className="chat-sidebar-card">
-        <h3>Quick Actions</h3>
+        <h3>{localizedCopy.quickActionsTitle}</h3>
+        {localizedCopy.helperText && (
+          <p className="chat-sidebar-hint">{localizedCopy.helperText}</p>
+        )}
         <div className="chat-quick-actions">
-          <button 
-            type="button" 
-            className="chat-quick-action"
-            onClick={() => onQuickAction("Check Balance")}
-          >
-            💰 Check Balance
-          </button>
-          <button 
-            type="button" 
-            className="chat-quick-action"
-            onClick={() => onQuickAction("Transfer Funds")}
-          >
-            💸 Transfer Funds
-          </button>
-          <button 
-            type="button" 
-            className="chat-quick-action"
-            onClick={() => onQuickAction("View Transactions")}
-          >
-            📊 View Transactions
-          </button>
-          <button 
-            type="button" 
-            className="chat-quick-action"
-            onClick={() => onQuickAction("Set Reminder")}
-          >
-            🔔 Set Reminder
-          </button>
+          {quickActions.map((action) => (
+            <button
+              key={action.id}
+              type="button"
+              className="chat-quick-action"
+              onClick={() => onQuickAction(action)}
+            >
+              {`${action.icon} ${action.label}`}
+            </button>
+          ))}
         </div>
       </div>
 
       <div className="chat-sidebar-card">
-        <h3>Recent Topics</h3>
+        <h3>{localizedCopy.recentTopicsTitle}</h3>
         <ul className="chat-recent-topics">
-          <li>Account balance inquiry</li>
-          <li>Transaction history</li>
-          <li>Fund transfer</li>
+          {recentTopics.map((topic) => (
+            <li key={topic}>{topic}</li>
+          ))}
         </ul>
       </div>
 
       <div className="chat-sidebar-card chat-sidebar-card--accent">
-        <h3>🎤 Voice Features</h3>
-        <p>Click the microphone icon to use voice commands.</p>
+        <h3>{voiceFeatures.title}</h3>
+        <p>{voiceFeatures.description}</p>
         {!isSpeechSupported ? (
           <div className="voice-status">
-            <span className="chat-badge chat-badge--warning">Not Available</span>
-            <p className="chat-sidebar-hint">Use Chrome, Edge, or Safari for voice input</p>
+            <span className="chat-badge chat-badge--warning">
+              {voiceFeatures.badges?.notAvailable || "Not Available"}
+            </span>
+            <p className="chat-sidebar-hint">{voiceFeatures.notSupportedHint}</p>
           </div>
         ) : isComingSoon ? (
           <div className="voice-status">
-            <span className="chat-badge chat-badge--info">🚧 Coming Soon</span>
+            <span className="chat-badge chat-badge--info">
+              {voiceFeatures.badges?.comingSoon || "🚧 Coming Soon"}
+            </span>
             <p className="chat-sidebar-hint">
-              Currently selected: {currentLanguage?.flag} {currentLanguage?.nativeName}
+              {voiceFeatures.comingSoonHint} {currentLanguage?.flag} {currentLanguage?.nativeName}
             </p>
             <p className="chat-sidebar-hint chat-sidebar-hint--warning">
-              This language is not ready yet. Please use English or Hindi.
+              {voiceFeatures.comingSoonWarning}
             </p>
           </div>
         ) : (
           <div className="voice-status">
-            <span className="chat-badge chat-badge--success">✓ Ready</span>
+            <span className="chat-badge chat-badge--success">
+              {voiceFeatures.badges?.ready || "✓ Ready"}
+            </span>
             <p className="chat-sidebar-hint">
-              Currently using: {currentLanguage?.flag} {currentLanguage?.nativeName} ({currentLanguage?.name})
+              {voiceFeatures.readyHint} {currentLanguage?.flag} {currentLanguage?.nativeName} ({currentLanguage?.name})
             </p>
           </div>
         )}
@@ -88,6 +86,34 @@ ChatSidebar.propTypes = {
   isSpeechSupported: PropTypes.bool.isRequired,
   selectedLanguage: PropTypes.string.isRequired,
   onQuickAction: PropTypes.func.isRequired,
+  copy: PropTypes.shape({
+    quickActionsTitle: PropTypes.string,
+    quickActions: PropTypes.arrayOf(
+      PropTypes.shape({
+        id: PropTypes.string,
+        icon: PropTypes.string,
+        label: PropTypes.string,
+        prompt: PropTypes.string,
+        command: PropTypes.string,
+      })
+    ),
+    recentTopicsTitle: PropTypes.string,
+    recentTopics: PropTypes.arrayOf(PropTypes.string),
+    helperText: PropTypes.string,
+    voiceFeatures: PropTypes.shape({
+      title: PropTypes.string,
+      description: PropTypes.string,
+      notSupportedHint: PropTypes.string,
+      comingSoonHint: PropTypes.string,
+      comingSoonWarning: PropTypes.string,
+      readyHint: PropTypes.string,
+      badges: PropTypes.object,
+    }),
+  }),
+};
+
+ChatSidebar.defaultProps = {
+  copy: FALLBACK_COPY,
 };
 
 export default ChatSidebar;

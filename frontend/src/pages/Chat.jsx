@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import PropTypes from "prop-types";
 import { Navigate, useNavigate } from "react-router-dom";
 
@@ -7,7 +7,6 @@ import ChatMessage from "../components/Chat/ChatMessage.jsx";
 import TypingIndicator from "../components/Chat/TypingIndicator.jsx";
 import ChatInput from "../components/Chat/ChatInput.jsx";
 import ChatSidebar from "../components/Chat/ChatSidebar.jsx";
-import LanguageSelector from "../components/Chat/LanguageSelector.jsx";
 import VoiceModeToggle from "../components/Chat/VoiceModeToggle.jsx";
 import useSpeechRecognition from "../hooks/useSpeechRecognition.js";
 import useTextToSpeech from "../hooks/useTextToSpeech.js";
@@ -15,15 +14,19 @@ import { useChatMessages } from "../hooks/useChatMessages.js";
 import { useVoiceMode } from "../hooks/useVoiceMode.js";
 import { useChatHandler } from "../hooks/useChatHandler.js";
 import { DEFAULT_LANGUAGE, getLanguageByCode } from "../config/voiceConfig.js";
+import { getChatCopy } from "../config/chatCopy.js";
+import { getPreferredLanguage, PREFERRED_LANGUAGE_KEY } from "../utils/preferences.js";
 import "./Chat.css";
 import "../components/Chat/VoiceModeToggle.css";
 
 const Chat = ({ session, onSignOut }) => {
   const navigate = useNavigate();
   const [inputText, setInputText] = useState("");
-  const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
+  const [language, setLanguage] = useState(() => getPreferredLanguage());
   const [isVoiceModeEnabled, setIsVoiceModeEnabled] = useState(false);
   const inputRef = useRef(null);
+
+  const chatCopy = useMemo(() => getChatCopy(language), [language]);
 
   // Get current language info
   const currentLanguage = getLanguageByCode(language);
@@ -36,7 +39,7 @@ const Chat = ({ session, onSignOut }) => {
     addUserMessage,
     addAssistantMessage,
     clearUnusedCards,
-  } = useChatMessages();
+  } = useChatMessages({ initialMessage: chatCopy.initialGreeting });
 
   // Use speech recognition hook with selected language
   // In normal mode, use non-continuous (stops after each utterance)
@@ -139,6 +142,17 @@ const Chat = ({ session, onSignOut }) => {
     }
   }, [isVoiceModeEnabled, stopSpeaking]);
 
+  useEffect(() => {
+    const handleStorageChange = (event) => {
+      if (event.key === PREFERRED_LANGUAGE_KEY) {
+        setLanguage(event.newValue || DEFAULT_LANGUAGE);
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, []);
+
   if (!session.authenticated) {
     return <Navigate to="/" replace />;
   }
@@ -205,12 +219,6 @@ const Chat = ({ session, onSignOut }) => {
                   onToggle={handleVoiceModeToggle}
                   disabled={!isSpeechSupported || !isTTSSupported || isLanguageComingSoon}
                 />
-                {isVoiceModeEnabled && (
-                  <LanguageSelector 
-                    selectedLanguage={language}
-                    onLanguageChange={setLanguage}
-                  />
-                )}
                 <button
                   type="button"
                   className="ghost-btn ghost-btn--compact"
@@ -250,7 +258,7 @@ const Chat = ({ session, onSignOut }) => {
                     />
                   </svg>
                   <div>
-                    <div>Assistant is speaking...</div>
+                    <div>{chatCopy.chatInput?.hints?.speaking || "Assistant is speaking..."}</div>
                     {selectedVoice && (
                       <div style={{ fontSize: '0.75rem', opacity: 0.7, marginTop: '0.25rem' }}>
                         Voice: {selectedVoice.name.split(' ')[0]}
@@ -291,6 +299,7 @@ const Chat = ({ session, onSignOut }) => {
                 onSubmit={handleSendMessage}
                 onVoiceClick={handleVoiceInput}
                 inputRef={inputRef}
+                copy={chatCopy.chatInput}
               />
 
               {/* Debug panel - remove in production */}
@@ -316,6 +325,7 @@ const Chat = ({ session, onSignOut }) => {
               isSpeechSupported={isSpeechSupported} 
               selectedLanguage={language}
               onQuickAction={handleQuickAction}
+              copy={chatCopy}
             />
           </main>
         </div>

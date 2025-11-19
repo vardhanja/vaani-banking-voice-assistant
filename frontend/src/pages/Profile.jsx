@@ -16,6 +16,8 @@ import {
   listDeviceBindings,
   revokeDeviceBinding,
 } from "../api/client.js";
+import LanguagePreferenceModal from "../components/LanguagePreferenceModal.jsx";
+import { getPreferredLanguage, setPreferredLanguage } from "../utils/preferences.js";
 
 const formatDateTime = (value) => {
   if (!value) return null;
@@ -53,6 +55,9 @@ const SESSION_EXPIRY_CODES = new Set([
 
 const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
   const navigate = useNavigate();
+  const [preferredLanguage, setPreferredLanguageState] = useState(() => getPreferredLanguage());
+  const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
+  const [modalLanguage, setModalLanguage] = useState(() => getPreferredLanguage());
 
   const [panels, setPanels] = useState({
     balance: false,
@@ -619,7 +624,10 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
           <button
             type="button"
             className="floating-chat-button"
-            onClick={() => navigate("/chat")}
+            onClick={() => {
+              setModalLanguage(preferredLanguage);
+              setIsLanguageModalOpen(true);
+            }}
             title="Voice assistant"
             aria-label="Open voice assistant"
           >
@@ -645,6 +653,20 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
               </g>
             </svg>
           </button>
+
+          <LanguagePreferenceModal
+            isOpen={isLanguageModalOpen}
+            selectedLanguage={modalLanguage}
+            onSelect={setModalLanguage}
+            onClose={() => setIsLanguageModalOpen(false)}
+            onConfirm={() => {
+              if (!modalLanguage) return;
+              setPreferredLanguage(modalLanguage);
+              setPreferredLanguageState(modalLanguage);
+              setIsLanguageModalOpen(false);
+              navigate("/chat");
+            }}
+          />
 
           <main className="card-surface profile-surface">
             {(deviceBindingRequired || voiceEnrollmentRequired || voiceReverificationRequired) && (

@@ -1,5 +1,34 @@
 import PropTypes from "prop-types";
 
+const FALLBACK_COPY = {
+  placeholders: {
+    default: "Type your message or use voice input...",
+    listening: "Listening... speak now",
+    voiceMode: "Voice mode active - speak your message...",
+    speaking: "Assistant is speaking... please wait",
+    comingSoon:
+      "Voice input not available for this language yet. Type your message or switch to English/Hindi.",
+  },
+  micTooltip: {
+    unsupported: "Voice input not supported in this browser",
+    comingSoon: "This language is coming soon. Please use English or Hindi.",
+    voiceMode: "Voice mode enabled - microphone is always on",
+    stop: "Stop listening",
+    start: "Start voice input",
+  },
+  hints: {
+    speaking: "Assistant is speaking... Input disabled",
+    comingSoon: "Voice input coming soon for this language. Please use English or Hindi.",
+    voiceMode: "Voice mode active - Speak naturally, your message will be sent automatically",
+    listening: "Listening... Speak clearly",
+    idle: "Try: \"Check my account balance\" or \"Show recent transactions\"",
+  },
+  sendButtonTitle: {
+    default: "Send message",
+    disabled: "Please wait while assistant is speaking",
+  },
+};
+
 /**
  * ChatInput component - Message input with voice and send controls
  */
@@ -9,34 +38,67 @@ const ChatInput = ({
   isTyping,
   isListening,
   isSpeechSupported,
-  isLanguageComingSoon,
+  isLanguageComingSoon = false,
   isSpeaking = false,
   isVoiceModeEnabled = false,
   onSubmit,
   onVoiceClick,
-  inputRef,
+  inputRef = null,
+  copy = FALLBACK_COPY,
 }) => {
+  const resolvedCopy = copy || FALLBACK_COPY;
+  const placeholders = {
+    ...FALLBACK_COPY.placeholders,
+    ...(resolvedCopy.placeholders || {}),
+  };
+  const micTooltip = {
+    ...FALLBACK_COPY.micTooltip,
+    ...(resolvedCopy.micTooltip || {}),
+  };
+  const hints = {
+    ...FALLBACK_COPY.hints,
+    ...(resolvedCopy.hints || {}),
+  };
+  const sendButtonTitle = {
+    ...FALLBACK_COPY.sendButtonTitle,
+    ...(resolvedCopy.sendButtonTitle || {}),
+  };
+
   const isVoiceDisabled = !isSpeechSupported || isLanguageComingSoon;
   const isInputDisabled = isTyping || isSpeaking || isListening;
 
+  const placeholderText = isSpeaking
+    ? placeholders.speaking
+    : isLanguageComingSoon
+    ? placeholders.comingSoon
+    : isVoiceModeEnabled
+    ? placeholders.voiceMode
+    : isListening
+    ? placeholders.listening
+    : placeholders.default;
+
+  const micTitle = !isSpeechSupported
+    ? micTooltip.unsupported
+    : isLanguageComingSoon
+    ? micTooltip.comingSoon
+    : isVoiceModeEnabled
+    ? micTooltip.voiceMode
+    : isListening
+    ? micTooltip.stop
+    : micTooltip.start;
+
+  const sendTitle = isSpeaking ? sendButtonTitle.disabled : sendButtonTitle.default;
+
   return (
     <form className="chat-input-container" onSubmit={onSubmit}>
-      <div className={`chat-input-wrapper ${isSpeaking ? 'chat-input-wrapper--disabled' : ''}`}>
+      <div className={`chat-input-wrapper ${isSpeaking ? "chat-input-wrapper--disabled" : ""}`}>
         <button
           type="button"
-          className={`chat-input-icon ${isListening ? 'chat-input-icon--listening' : ''} ${isVoiceDisabled ? 'chat-input-icon--disabled' : ''}`}
+          className={`chat-input-icon ${isListening ? "chat-input-icon--listening" : ""} ${
+            isVoiceDisabled ? "chat-input-icon--disabled" : ""
+          }`}
           onClick={onVoiceClick}
-          title={
-            !isSpeechSupported
-              ? "Voice input not supported in this browser"
-              : isLanguageComingSoon
-              ? "This language is coming soon. Please use English or Hindi."
-              : isVoiceModeEnabled
-              ? "Voice mode enabled - microphone is always on"
-              : isListening
-              ? "Stop listening"
-              : "Start voice input"
-          }
+          title={micTitle}
           disabled={isVoiceDisabled || isSpeaking}
         >
           <svg
@@ -80,17 +142,7 @@ const ChatInput = ({
           ref={inputRef}
           type="text"
           className="chat-input"
-          placeholder={
-            isSpeaking
-              ? "Assistant is speaking... please wait"
-              : isLanguageComingSoon
-              ? "Voice input not available for this language yet. Type your message or switch to English/Hindi."
-              : isVoiceModeEnabled
-              ? "Voice mode active - speak your message..."
-              : isListening
-              ? "Listening... speak now"
-              : "Type your message or use voice input..."
-          }
+          placeholder={placeholderText}
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           disabled={isInputDisabled}
@@ -99,7 +151,7 @@ const ChatInput = ({
           type="submit"
           className="chat-send-button"
           disabled={!inputText.trim() || isTyping || isSpeaking}
-          title={isSpeaking ? "Please wait while assistant is speaking" : "Send message"}
+          title={sendTitle}
         >
           <svg
             width="24"
@@ -128,76 +180,46 @@ const ChatInput = ({
       <div className="chat-input-hints">
         {isSpeaking && (
           <span className="chat-hint chat-hint--warning">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <circle cx="12" cy="12" r="10" fill="#f39c12" />
               <path d="M12 6V12L16 14" stroke="white" strokeWidth="2" strokeLinecap="round" />
             </svg>
-            Assistant is speaking... Input disabled
+            {hints.speaking}
           </span>
         )}
         {!isSpeaking && isLanguageComingSoon && (
           <span className="chat-hint chat-hint--warning">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <circle cx="12" cy="12" r="10" fill="#f39c12" />
               <path d="M12 8V12" stroke="white" strokeWidth="2" strokeLinecap="round" />
               <circle cx="12" cy="16" r="1" fill="white" />
             </svg>
-            Voice input coming soon for this language. Please use English or Hindi.
+            {hints.comingSoon}
           </span>
         )}
         {!isSpeaking && !isLanguageComingSoon && isVoiceModeEnabled && (
           <span className="chat-hint chat-hint--listening">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <circle cx="12" cy="12" r="10" fill="#7cb5ff" />
             </svg>
-            Voice mode active - Speak naturally, your message will be sent automatically
+            {hints.voiceMode}
           </span>
         )}
         {!isSpeaking && !isLanguageComingSoon && !isVoiceModeEnabled && isListening && (
           <span className="chat-hint chat-hint--listening">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <circle cx="12" cy="12" r="10" fill="#2ecc71" />
             </svg>
-            Listening... Speak clearly
+            {hints.listening}
           </span>
         )}
         {!isSpeaking && !isLanguageComingSoon && !isVoiceModeEnabled && !isListening && (
           <span className="chat-hint">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
               <path d="M12 6V12L16 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
-            Try: "Check my account balance" or "Show recent transactions"
+            {hints.idle}
           </span>
         )}
       </div>
@@ -217,6 +239,20 @@ ChatInput.propTypes = {
   onSubmit: PropTypes.func.isRequired,
   onVoiceClick: PropTypes.func.isRequired,
   inputRef: PropTypes.object,
+  copy: PropTypes.shape({
+    placeholders: PropTypes.object,
+    micTooltip: PropTypes.object,
+    hints: PropTypes.object,
+    sendButtonTitle: PropTypes.object,
+  }),
+};
+
+ChatInput.defaultProps = {
+  isLanguageComingSoon: false,
+  isSpeaking: false,
+  isVoiceModeEnabled: false,
+  inputRef: null,
+  copy: FALLBACK_COPY,
 };
 
 export default ChatInput;

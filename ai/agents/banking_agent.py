@@ -40,19 +40,17 @@ async def banking_agent(state):
     msg_lower = last_user_message.lower()
     
     reminder_keywords = ["reminder", "reminders", "अनुस्मारक", "set reminder", "create reminder", "view reminder", "show reminder", "remind me"]
-    if any(keyword in msg_lower for keyword in reminder_keywords):
-        response_content = await handle_reminder_query(state, user_context, language)
-    
-    # Check for statement/download requests with comprehensive keyword matching
-    # Priority: If statement/download is mentioned, handle as statement request
-    # (even if balance is also mentioned, statement takes precedence)
     statement_keywords = [
         "statement", "स्टेटमेंट", "bank statement", "account statement",
         "download", "डाउनलोड", "nikalna", "nikal", "export", 
         "statement download", "download statement", "bank statement nikalna",
         "account statement download", "statement nikalna", "statement nikalo"
     ]
-    if any(keyword in msg_lower for keyword in statement_keywords):
+
+    if any(keyword in msg_lower for keyword in reminder_keywords):
+        response_content = await handle_reminder_query(state, user_context, language)
+
+    elif any(keyword in msg_lower for keyword in statement_keywords):
         response_content = await handle_statement_request(state, last_user_message, language)
     
     elif any(word in msg_lower for word in ["balance", "बैलेंस"]):
