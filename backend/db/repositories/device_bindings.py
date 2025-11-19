@@ -43,12 +43,21 @@ def create_device_binding(
     return binding
 
 
-def list_device_bindings(session: Session, *, user_id) -> Iterable[DeviceBinding]:
+def list_device_bindings(session: Session, *, user_id, include_revoked: bool = False) -> Iterable[DeviceBinding]:
+    """
+    List device bindings for a user.
+    
+    By default, excludes revoked bindings (they remain in database for audit purposes).
+    Set include_revoked=True to include revoked bindings for audit queries.
+    """
     stmt = (
         select(DeviceBinding)
         .where(DeviceBinding.user_id == user_id)
-        .order_by(DeviceBinding.created_at.desc())
     )
+    if not include_revoked:
+        # Exclude revoked bindings from normal queries (they remain in DB for audit)
+        stmt = stmt.where(DeviceBinding.trust_level != DeviceTrustLevel.REVOKED)
+    stmt = stmt.order_by(DeviceBinding.created_at.desc())
     return session.scalars(stmt).all()
 
 

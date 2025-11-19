@@ -63,6 +63,14 @@ class TTSRequest(BaseModel):
     use_azure: bool = Field(default=False, description="Use Azure TTS if available")
 
 
+class VoiceVerificationRequest(BaseModel):
+    """Request for AI-enhanced voice verification"""
+    similarity_score: float = Field(..., description="Cosine similarity score from base verifier")
+    threshold: float = Field(..., description="Base threshold value")
+    user_context: Dict[str, Any] = Field(default_factory=dict, description="User context for analysis")
+    analysis_prompt: Optional[str] = Field(default=None, description="Optional custom analysis prompt")
+
+
 class HealthResponse(BaseModel):
     """Health check response"""
     status: str
@@ -285,6 +293,91 @@ async def text_to_speech(request: TTSRequest):
     except Exception as e:
         logger.error("tts_error", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/voice-verification")
+async def voice_verification(request: VoiceVerificationRequest):
+    """
+    AI-enhanced voice verification analysis
+    
+    Uses LLM to analyze voice authentication attempts and provide
+    confidence scores, risk assessment, and recommendations.
+    """
+    try:
+        llm = get_llm_service()
+        
+        # Build analysis prompt
+        if request.analysis_prompt:
+            prompt = request.analysis_prompt
+        else:
+            prompt = f"""Analyze this voice authentication attempt:
+
+Similarity Score: {request.similarity_score:.4f}
+Threshold: {request.threshold:.4f}
+Status: {'ABOVE' if request.similarity_score >= request.threshold else 'BELOW'} threshold
+
+User Context: {request.user_context}
+
+Provide analysis in JSON format:
+{{
+    "confidence": 0.0-1.0,
+    "risk_level": "LOW|MEDIUM|HIGH",
+    "recommendation": "ACCEPT|REJECT|REVIEW",
+    "reasoning": "brief explanation"
+}}"""
+
+        # Get AI analysis
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a voice authentication security analyst. Analyze voice similarity scores and provide security recommendations. Always respond with valid JSON only."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+        
+        response_text = await llm.chat(
+            messages,
+            use_fast_model=True,  # Use fast model for quick response
+            temperature=0.3,  # Lower temperature for more deterministic analysis
+            max_tokens=200
+        )
+        
+        # Parse JSON response
+        import json
+        import re
+        
+        # Extract JSON from response (handle cases where LLM adds extra text)
+        json_match = re.search(r'\{[^{}]*\}', response_text, re.DOTALL)
+        if json_match:
+            analysis = json.loads(json_match.group())
+        else:
+            # Fallback: create basic analysis
+            analysis = {
+                "confidence": request.similarity_score,
+                "risk_level": "MEDIUM" if request.similarity_score >= request.threshold else "HIGH",
+                "recommendation": "ACCEPT" if request.similarity_score >= request.threshold else "REVIEW",
+                "reasoning": "Unable to parse AI response, using similarity score"
+            }
+        
+        # Ensure all required fields
+        analysis.setdefault("confidence", request.similarity_score)
+        analysis.setdefault("risk_level", "MEDIUM")
+        analysis.setdefault("recommendation", "REVIEW")
+        analysis.setdefault("reasoning", "AI analysis completed")
+        
+        return analysis
+        
+    except Exception as e:
+        # Return fallback analysis on error
+        return {
+            "confidence": request.similarity_score,
+            "risk_level": "MEDIUM",
+            "recommendation": "REVIEW",
+            "reasoning": f"AI analysis unavailable: {str(e)}"
+        }
 
 
 @app.get("/api/models")

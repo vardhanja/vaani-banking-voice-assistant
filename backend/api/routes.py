@@ -166,6 +166,7 @@ async def login_v1(
         "voice_enrollment_required": "Please enroll your voice signature to continue.",
         "voice_mismatch": "Voice sample did not match our records.",
         "voice_sample_invalid": "Voice sample was too short or unclear. Please record again.",
+        "validated": "Credentials validated successfully.",
     }
 
     if validate_only_flag:

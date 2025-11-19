@@ -3,11 +3,13 @@ import PropTypes from "prop-types";
 import { useNavigate } from "react-router-dom";
 
 import SunHeader from "../components/SunHeader.jsx";
+import LanguageToggle from "../components/LanguageToggle.jsx";
 import {
   fetchBeneficiaries,
   createBeneficiary,
   deleteBeneficiary,
 } from "../api/client.js";
+import { usePageLanguage } from "../hooks/usePageLanguage.js";
 
 const SESSION_EXPIRY_CODES = new Set([
   "session_timeout",
@@ -18,6 +20,8 @@ const SESSION_EXPIRY_CODES = new Set([
 
 const Beneficiaries = ({ session, onSignOut }) => {
   const navigate = useNavigate();
+  const { strings } = usePageLanguage();
+  const s = strings.beneficiaries;
   const { accessToken, user } = session;
 
   const [items, setItems] = useState([]);
@@ -78,7 +82,7 @@ const Beneficiaries = ({ session, onSignOut }) => {
     event.preventDefault();
     if (!accessToken) return;
     if (!form.name.trim() || !form.accountNumber.trim()) {
-      setFormError("Please provide a beneficiary name and account number.");
+      setFormError(s.provideNameAndAccount);
       return;
     }
 
@@ -95,7 +99,7 @@ const Beneficiaries = ({ session, onSignOut }) => {
       const created = await createBeneficiary({ accessToken, payload });
       if (created) {
         setItems((prev) => [created, ...prev]);
-        setFormMessage({ type: "success", text: "Beneficiary added successfully." });
+        setFormMessage({ type: "success", text: s.beneficiaryAdded });
         setForm({
           name: "",
           accountNumber: "",
@@ -113,9 +117,7 @@ const Beneficiaries = ({ session, onSignOut }) => {
 
   const handleRemove = async (beneficiaryId) => {
     if (!accessToken || !beneficiaryId) return;
-    const confirmed = window.confirm(
-      "This will disable the beneficiary immediately. Do you want to continue?",
-    );
+    const confirmed = window.confirm(s.removeConfirm);
     if (!confirmed) return;
 
     try {
@@ -140,70 +142,72 @@ const Beneficiaries = ({ session, onSignOut }) => {
           <SunHeader
             subtitle={`${user?.branch?.name ?? "Sun National Bank"} · RBI compliant`}
             actionSlot={
-              <button type="button" className="ghost-btn" onClick={onSignOut}>
-                Log out
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                <LanguageToggle />
+                <button type="button" className="ghost-btn" onClick={onSignOut}>
+                  {s.logOut}
+                </button>
+              </div>
             }
           />
           <main className="card-surface profile-surface">
             <article className="profile-card profile-card--span">
               <button type="button" className="link-btn" onClick={() => navigate(-1)}>
-                ← Back to previous page
+                {s.backToPrevious}
               </button>
-              <h1>Manage beneficiaries</h1>
+              <h1>{s.title}</h1>
               <p className="profile-hint">
-                RBI mandates a verified beneficiary list before high-value transfers. Add trusted
-                recipients here so that future payments are quicker and safer.
+                {s.subtitle}
               </p>
             </article>
 
             <article className="profile-card profile-card--span">
-              <h2>Add a new beneficiary</h2>
+              <h2>{s.addNewBeneficiary}</h2>
               <form className="form-grid" onSubmit={handleAddBeneficiary}>
                 <label htmlFor="beneficiary-name">
-                  Beneficiary name
+                  {s.beneficiaryName}
                   <input
                     id="beneficiary-name"
                     name="name"
                     type="text"
                     value={form.name}
                     onChange={handleInputChange}
-                    placeholder="e.g., Ramesh Kumar"
+                    placeholder={s.beneficiaryNamePlaceholder}
                     required
                   />
                 </label>
                 <label htmlFor="beneficiary-account">
-                  Account number
+                  {s.accountNumber}
                   <input
                     id="beneficiary-account"
                     name="accountNumber"
                     type="text"
                     value={form.accountNumber}
                     onChange={handleInputChange}
-                    placeholder="Enter exact account number"
+                    placeholder={s.accountNumberPlaceholder}
                     required
                   />
                 </label>
                 <label htmlFor="beneficiary-bank">
-                  Bank name
+                  {s.bankName}
                   <input
                     id="beneficiary-bank"
                     name="bankName"
                     type="text"
                     value={form.bankName}
                     onChange={handleInputChange}
-                    placeholder="Sun National Bank"
+                    placeholder={s.bankNamePlaceholder}
                   />
                 </label>
                 <label htmlFor="beneficiary-ifsc">
-                  IFSC (optional)
+                  {s.ifsc}
                   <input
                     id="beneficiary-ifsc"
                     name="ifsc"
                     type="text"
                     value={form.ifsc}
                     onChange={handleInputChange}
-                    placeholder="SUNB0001HYD"
+                    placeholder={s.ifscPlaceholder}
                   />
                 </label>
                 <button
@@ -211,7 +215,7 @@ const Beneficiaries = ({ session, onSignOut }) => {
                   className="primary-btn primary-btn--compact"
                   disabled={formSubmitting}
                 >
-                  {formSubmitting ? "Adding…" : "Add beneficiary"}
+                  {formSubmitting ? s.adding : s.addBeneficiary}
                 </button>
               </form>
               {formError && <div className="form-error">{formError}</div>}
@@ -223,17 +227,16 @@ const Beneficiaries = ({ session, onSignOut }) => {
                 </div>
               )}
               <p className="profile-hint">
-                Production deployments will enforce a cooling period and OTP confirmation before a
-                beneficiary becomes active.
+                {s.productionNote}
               </p>
             </article>
 
             <article className="profile-card profile-card--span">
-              <h2>Saved beneficiaries</h2>
-              {loading && <p>Loading beneficiaries…</p>}
+              <h2>{s.savedBeneficiaries}</h2>
+              {loading && <p>{s.loading}</p>}
               {error && <div className="form-error">{error}</div>}
               {!loading && !error && !hasItems && (
-                <p className="profile-hint">No beneficiaries added yet.</p>
+                <p className="profile-hint">{s.noBeneficiariesYet}</p>
               )}
               {!loading && !error && hasItems && (
                 <ul className="beneficiary-list">
@@ -243,7 +246,7 @@ const Beneficiaries = ({ session, onSignOut }) => {
                         <p className="beneficiary-list__name">{item.name}</p>
                         <p className="beneficiary-list__account">{item.accountNumber}</p>
                         <p className="beneficiary-list__meta">
-                          IFSC {item.ifsc} · Added on {new Date(item.addedAt).toLocaleDateString("en-IN")}
+                          IFSC {item.ifsc} · {s.addedOn} {new Date(item.addedAt).toLocaleDateString("en-IN")}
                         </p>
                       </div>
                       <button
@@ -251,7 +254,7 @@ const Beneficiaries = ({ session, onSignOut }) => {
                         className="link-btn link-btn--danger"
                         onClick={() => handleRemove(item.id)}
                       >
-                        Remove
+                        {s.remove}
                       </button>
                     </li>
                   ))}

@@ -3,11 +3,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 
 import SunHeader from "../components/SunHeader.jsx";
+import LanguageToggle from "../components/LanguageToggle.jsx";
 import {
   listDeviceBindings,
   registerDeviceBinding,
   revokeDeviceBinding,
 } from "../api/client.js";
+import { usePageLanguage } from "../hooks/usePageLanguage.js";
+import { getVoicePhrase } from "../config/loginStrings.js";
 
 const SESSION_EXPIRY_CODES = new Set([
   "session_timeout",
@@ -16,9 +19,6 @@ const SESSION_EXPIRY_CODES = new Set([
   "session_invalid",
 ]);
 
-const VOICE_PHRASE_HINDI = "सन बैंक मेरा साथी, हर कदम सुरक्षित बैंकिंग का वादा";
-const VOICE_PHRASE_ENGLISH = "Sun Bank is my companion, a promise of secure banking at every step";
-const VOICE_PHRASE = `${VOICE_PHRASE_HINDI} or ${VOICE_PHRASE_ENGLISH}`;
 const MAX_RECORDING_MS = 7000;
 
 const hashText = async (text) => {
@@ -116,6 +116,9 @@ const convertBlobToWav = async (blob) => {
 
 const DeviceBindingPage = ({ session, onSignOut }) => {
   const navigate = useNavigate();
+  const { strings, language } = usePageLanguage();
+  const s = strings.deviceBinding;
+  const voicePhrase = getVoicePhrase(language);
   const isAuthenticated = Boolean(session?.authenticated);
   const accessToken = session?.accessToken ?? null;
 
@@ -140,7 +143,7 @@ const DeviceBindingPage = ({ session, onSignOut }) => {
       if (error?.code && SESSION_EXPIRY_CODES.has(error.code)) {
         setStatus({
           type: "error",
-          message: "Your session expired. Please sign in again to manage trusted devices.",
+          message: s.sessionExpired || "Your session expired. Please sign in again to manage trusted devices.",
         });
         onSignOut?.();
         return true;
@@ -274,7 +277,8 @@ const DeviceBindingPage = ({ session, onSignOut }) => {
       recorder.start();
       mediaRecorderRef.current = recorder;
       setRecordingState("recording");
-  setRecordingStatus(`Recording… Speak clearly: "${VOICE_PHRASE_HINDI}" or "${VOICE_PHRASE_ENGLISH}"`);
+      const currentPhrase = getVoicePhrase(language);
+      setRecordingStatus(`Recording… Speak clearly: "${currentPhrase}"`);
       setTimeout(() => {
         if (mediaRecorderRef.current === recorder && recorder.state === "recording") {
           stopRecording();
@@ -292,9 +296,10 @@ const DeviceBindingPage = ({ session, onSignOut }) => {
     event.preventDefault();
     if (!accessToken) return;
     if (!voiceBlob) {
+      const currentPhrase = getVoicePhrase(language);
       setStatus({
         type: "error",
-        message: `Please record the passphrase "${VOICE_PHRASE_HINDI}" or "${VOICE_PHRASE_ENGLISH}" before binding.`,
+        message: `${s.pleaseRecord} "${currentPhrase}" ${s.beforeBinding}`,
       });
       return;
     }
@@ -317,7 +322,7 @@ const DeviceBindingPage = ({ session, onSignOut }) => {
       });
       setStatus({
         type: "success",
-        message: "Device and voice passphrase registered successfully.",
+        message: s.deviceBound,
       });
     } catch (error) {
       if (handleSessionExpiry(error)) return;
@@ -336,7 +341,7 @@ const DeviceBindingPage = ({ session, onSignOut }) => {
       setBindings((prev) => prev.map((item) => (item.id === binding.id ? binding : item)));
       setStatus({
         type: "success",
-        message: "Device binding revoked successfully.",
+        message: s.deviceRevoked,
       });
     } catch (error) {
       if (handleSessionExpiry(error)) return;
@@ -355,17 +360,20 @@ const DeviceBindingPage = ({ session, onSignOut }) => {
       <div className="app-content">
         <div className="app-gradient">
           <SunHeader
-            subtitle="Manage trusted devices and voice binding"
+            subtitle={s.title}
             actionSlot={
-              <button type="button" className="ghost-btn" onClick={() => navigate(-1)}>
-                Back
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                <LanguageToggle />
+                <button type="button" className="ghost-btn" onClick={() => navigate(-1)}>
+                  {s.back}
+                </button>
+              </div>
             }
           />
           <main className="card-surface profile-surface">
             <section className="profile-card profile-card--span">
-              <h2>Trusted devices</h2>
-              {loading && <p className="profile-hint">Loading device bindings…</p>}
+              <h2>{s.trustedDevices}</h2>
+              {loading && <p className="profile-hint">{s.loading}</p>}
               {status.type && (
                 <div className={status.type === "success" ? "form-success" : "form-error"}>
                   {status.message}
@@ -373,7 +381,7 @@ const DeviceBindingPage = ({ session, onSignOut }) => {
               )}
               {!loading && bindings.length === 0 && (
                 <p className="profile-hint">
-                  No trusted devices found. Add this device to enjoy voice + device binding.
+                  {s.noDevices}
                 </p>
               )}
               {!loading && bindings.length > 0 && (
@@ -386,10 +394,10 @@ const DeviceBindingPage = ({ session, onSignOut }) => {
                           {binding.platform ?? "unknown"} · Trust {binding.trustLevel}
                         </p>
                         <p className="profile-hint">
-                          Last verified:{" "}
+                          {s.lastVerified}{" "}
                           {binding.lastVerifiedAt
                             ? new Date(binding.lastVerifiedAt).toLocaleString("en-IN")
-                            : "Never"}
+                            : s.never}
                         </p>
                       </div>
                       <div className="profile-account-actions">
@@ -400,10 +408,10 @@ const DeviceBindingPage = ({ session, onSignOut }) => {
                             onClick={() => handleRevoke(binding.id)}
                             disabled={loading}
                           >
-                            Revoke
+                            {s.revoke}
                           </button>
                         ) : (
-                          <span className="profile-hint">Revoked</span>
+                          <span className="profile-hint">{s.revoked}</span>
                         )}
                       </div>
                     </li>
@@ -413,32 +421,28 @@ const DeviceBindingPage = ({ session, onSignOut }) => {
             </section>
 
             <section className="profile-card profile-card--span">
-              <h2>Bind this device</h2>
+              <h2>{s.bindDevice}</h2>
               <p className="profile-hint">
-                Voice + device binding pairs your voice signature with this device as per RBI’s
-                risk-based authentication guidance. Provide a friendly label, then record yourself
-                speaking the passphrase so we can secure this device.
+                {s.description}
               </p>
 
               <form className="form-grid" onSubmit={handleRegister}>
                 <label htmlFor="device-label">
-                  Device label
+                  {s.deviceLabel}
                   <input
                     id="device-label"
                     name="deviceLabel"
                     type="text"
                     value={form.deviceLabel}
                     onChange={handleInputChange}
-                    placeholder="e.g., Ananya’s Redmi Note"
+                    placeholder={s.deviceLabelPlaceholder}
                   />
                 </label>
                 <div className="form-grid--span profile-voice-block">
-                  <p className="profile-label">Voice passphrase</p>
+                  <p className="profile-label">{s.voicePassphrase}</p>
                   <p className="profile-hint">
-                    Speak one of the passphrases below during verification:&nbsp;
-                    <strong>{VOICE_PHRASE_HINDI}</strong>
-                    {' '}or{' '}
-                    <strong>{VOICE_PHRASE_ENGLISH}</strong>
+                    {s.speakPassphrase}&nbsp;
+                    <strong>{voicePhrase}</strong>
                   </p>
                   <div className="voice-controls">
                     <button
@@ -447,8 +451,8 @@ const DeviceBindingPage = ({ session, onSignOut }) => {
                       onClick={recordingState === "recording" ? stopRecording : startRecording}
                     >
                       {recordingState === "recording"
-                        ? "Stop recording"
-                        : "Record voice sample"}
+                        ? s.stopRecording
+                        : s.recordVoiceSample}
                     </button>
                     {voiceSummary && (
                       <span className="profile-hint">
@@ -465,14 +469,14 @@ const DeviceBindingPage = ({ session, onSignOut }) => {
                   {recordingStatus && <p className="profile-hint">{recordingStatus}</p>}
                 </div>
                 <p className="profile-hint form-grid--span">
-                  Device fingerprint (hashed): <code>{fingerprint.slice(0, 24)}…</code>
+                  {s.deviceFingerprint} <code>{fingerprint.slice(0, 24)}…</code>
                 </p>
                 <button
                   type="submit"
                   className="primary-btn primary-btn--compact"
                   disabled={loading || !fingerprint}
                 >
-                  {loading ? "Binding device…" : "Bind this device"}
+                  {loading ? s.bindingDevice : s.bindDevice}
                 </button>
               </form>
             </section>
