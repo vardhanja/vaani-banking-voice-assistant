@@ -1,0 +1,52 @@
+.voice-enrollment-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.voice-enrollment-modal {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  max-width: 500px;
+  width: 100%;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.voice-enrollment-modal h2 {
+  margin: 0 0 1rem 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.voice-enrollment-modal p {
+  margin: 0 0 1rem 0;
+  color: #4a4a4a;
+  line-height: 1.6;
+}
+
+.voice-enrollment-modal-description {
+  font-size: 0.9rem;
+  color: #6a6a6a;
+}
+
+.voice-enrollment-modal-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+}
+
+.voice-enrollment-modal-actions button {
+  min-width: 100px;
+}
+

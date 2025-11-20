@@ -3,7 +3,9 @@ import { useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 
 import SunHeader from "../components/SunHeader.jsx";
+import LanguageToggle from "../components/LanguageToggle.jsx";
 import { fetchReminders, updateReminderStatus } from "../api/client.js";
+import { usePageLanguage } from "../hooks/usePageLanguage.js";
 
 const formatDateTime = (value) => {
   if (!value) return null;
@@ -24,6 +26,8 @@ const SESSION_EXPIRY_CODES = new Set([
 
 const RemindersPage = ({ session, onSignOut }) => {
   const navigate = useNavigate();
+  const { strings } = usePageLanguage();
+  const s = strings.reminders;
   const isAuthenticated = Boolean(session?.authenticated);
   const accessToken = session?.accessToken ?? null;
 
@@ -110,20 +114,23 @@ const RemindersPage = ({ session, onSignOut }) => {
       <div className="app-content">
         <div className="app-gradient">
           <SunHeader
-            subtitle="All reminders"
+            subtitle={s.title}
             actionSlot={
-              <button type="button" className="ghost-btn" onClick={() => navigate(-1)}>
-                Back
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                <LanguageToggle />
+                <button type="button" className="ghost-btn" onClick={() => navigate(-1)}>
+                  {s.back}
+                </button>
+              </div>
             }
           />
           <main className="card-surface profile-surface">
             <section className="profile-card profile-card--span">
-              <h2>Reminders</h2>
+              <h2>{s.reminders}</h2>
               {error && <div className="form-error">{error}</div>}
-              {loading && <p className="profile-hint">Loading reminders…</p>}
+              {loading && <p className="profile-hint">{s.loading}</p>}
               {!loading && reminders.length === 0 && (
-                <p className="profile-hint">No reminders found.</p>
+                <p className="profile-hint">{s.noRemindersFound}</p>
               )}
               {!loading && reminders.length > 0 && (
                 <ul className="reminders-list">
@@ -142,7 +149,7 @@ const RemindersPage = ({ session, onSignOut }) => {
                           className="link-btn"
                           onClick={() => handleMarkSent(reminder.id)}
                         >
-                          Mark sent
+                          {s.markSent}
                         </button>
                       )}
                     </li>

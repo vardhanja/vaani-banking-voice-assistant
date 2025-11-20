@@ -1,9 +1,12 @@
 import PropTypes from "prop-types";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Navigate, useNavigate, useLocation } from "react-router-dom";
 
 import SunHeader from "../components/SunHeader.jsx";
+import LanguageToggle from "../components/LanguageToggle.jsx";
 import "./Chat.css";
+import { usePageLanguage } from "../hooks/usePageLanguage.js";
+import { getVoicePhrase } from "../config/loginStrings.js";
 import {
   fetchAccounts,
   fetchTransactions,
@@ -17,6 +20,8 @@ import {
   revokeDeviceBinding,
 } from "../api/client.js";
 import LanguagePreferenceModal from "../components/LanguagePreferenceModal.jsx";
+import VoiceEnrollmentModal from "../components/VoiceEnrollmentModal.jsx";
+import ForceLogoutModal from "../components/ForceLogoutModal.jsx";
 import { getPreferredLanguage, setPreferredLanguage } from "../utils/preferences.js";
 
 const formatDateTime = (value) => {
@@ -55,9 +60,30 @@ const SESSION_EXPIRY_CODES = new Set([
 
 const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { strings, language } = usePageLanguage();
+  const s = strings.profile;
   const [preferredLanguage, setPreferredLanguageState] = useState(() => getPreferredLanguage());
   const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
   const [modalLanguage, setModalLanguage] = useState(() => getPreferredLanguage());
+  const [isVoiceEnrollmentModalOpen, setIsVoiceEnrollmentModalOpen] = useState(false);
+  const [isForceLogoutModalOpen, setIsForceLogoutModalOpen] = useState(false);
+  const [hasVoiceBinding, setHasVoiceBinding] = useState(false);
+  const [checkingVoiceBinding, setCheckingVoiceBinding] = useState(true);
+  
+  // Check if current session was logged in with voice
+  const loggedInWithVoice = useMemo(() => {
+    const detail = sessionDetail ?? {};
+    return Boolean(detail.voiceLogin) || detail.loginMode === "voice";
+  }, [sessionDetail]);
+
+  // Determine if voice session is secured
+  // Voice session is secured if:
+  // 1. User logged in with voice, OR
+  // 2. User has an active voice binding (even if logged in with password)
+  const isVoiceSecured = useMemo(() => {
+    return loggedInWithVoice || hasVoiceBinding;
+  }, [loggedInWithVoice, hasVoiceBinding]);
 
   const [panels, setPanels] = useState({
     balance: false,
@@ -120,12 +146,12 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
   const deviceBindingRequired = Boolean(bindingDetail.deviceBindingRequired);
   const voiceEnrollmentRequired = Boolean(bindingDetail.voiceEnrollmentRequired);
   const voiceReverificationRequired = Boolean(bindingDetail.voiceReverificationRequired);
-  const voicePhrase = bindingDetail.voicePhrase ?? "Sun Bank hai mera saathi";
+  const voicePhrase = bindingDetail.voicePhrase ?? getVoicePhrase(language);
 
   const handleSessionExpiry = useCallback(
     (error, setter) => {
     if (error?.code && SESSION_EXPIRY_CODES.has(error.code)) {
-      const message = "Your session expired due to inactivity. Please sign in again.";
+      const message = s.sessionExpired || "Your session expired due to inactivity. Please sign in again.";
       if (typeof setter === "function") {
         setter(message);
       }
@@ -336,6 +362,81 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
     }
   };
 
+  // Function to check voice binding status
+  const checkVoiceBindingStatus = useCallback(() => {
+    if (!accessToken) {
+      setCheckingVoiceBinding(false);
+      setHasVoiceBinding(false);
+      return;
+    }
+    let mounted = true;
+    setCheckingVoiceBinding(true);
+    listDeviceBindings({ accessToken })
+      .then((data) => {
+        if (!mounted) return;
+        // Check if any ACTIVE (non-revoked) device binding has voice signature
+        // Only count bindings that are trusted (not revoked) and have voice signature
+        const hasVoice = data.some(
+          (binding) => 
+            binding.voiceSignaturePresent === true && 
+            binding.trustLevel !== "revoked"
+        );
+        setHasVoiceBinding(hasVoice);
+      })
+      .catch((error) => {
+        if (!mounted) return;
+        // Don't show error for voice check, just assume no voice
+        setHasVoiceBinding(false);
+      })
+      .finally(() => {
+        if (mounted) setCheckingVoiceBinding(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [accessToken]);
+
+  // Check voice binding status on mount
+  useEffect(() => {
+    checkVoiceBindingStatus();
+  }, [checkVoiceBindingStatus]);
+
+  // Refresh voice binding status when page becomes visible (user returns from device binding page)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && accessToken) {
+        checkVoiceBindingStatus();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [accessToken, checkVoiceBindingStatus]);
+
+  // Also refresh when window gains focus (alternative approach)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (accessToken) {
+        checkVoiceBindingStatus();
+      }
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [accessToken, checkVoiceBindingStatus]);
+
+  // Refresh voice binding status when route changes to profile (user navigates back from device binding)
+  const prevPathRef = useRef(location.pathname);
+  useEffect(() => {
+    // Only refresh if we're on profile page and we came from device-binding page
+    if (location.pathname === "/profile" && prevPathRef.current === "/device-binding" && accessToken) {
+      checkVoiceBindingStatus();
+    }
+    prevPathRef.current = location.pathname;
+  }, [location.pathname, accessToken, checkVoiceBindingStatus]);
+
   // fetch trusted device bindings when deviceBinding panel opens
   useEffect(() => {
     if (!panels.deviceBinding) return;
@@ -350,6 +451,14 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
       .then((data) => {
         if (!mounted) return;
         setDeviceBindings(data);
+        // Update voice binding status when device bindings are fetched
+        // Only count active (non-revoked) bindings with voice signature
+        const hasVoice = data.some(
+          (binding) => 
+            binding.voiceSignaturePresent === true && 
+            binding.trustLevel !== "revoked"
+        );
+        setHasVoiceBinding(hasVoice);
       })
       .catch((error) => {
         if (!mounted) return;
@@ -363,6 +472,45 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
       mounted = false;
     };
   }, [panels.deviceBinding, accessToken, handleSessionExpiry]);
+
+  // Refresh voice binding status when device binding panel is closed (user might have made changes)
+  useEffect(() => {
+    if (!panels.deviceBinding && accessToken) {
+      // Small delay to ensure any pending operations complete
+      const timeoutId = setTimeout(() => {
+        checkVoiceBindingStatus();
+      }, 500);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [panels.deviceBinding, accessToken, checkVoiceBindingStatus]);
+
+  // Refresh voice binding status when device bindings are revoked
+  const handleDeviceRevoke = async (bindingId) => {
+    if (!accessToken) return;
+    setDeviceLoading(true);
+    setDeviceError("");
+    try {
+      const updated = await revokeDeviceBinding({ accessToken, bindingId });
+      setDeviceBindings((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      // Re-check voice binding status after revocation
+      // Only count active (non-revoked) bindings with voice signature
+      const data = await listDeviceBindings({ accessToken });
+      const hasVoice = data.some(
+        (binding) => 
+          binding.voiceSignaturePresent === true && 
+          binding.trustLevel !== "revoked"
+      );
+      setHasVoiceBinding(hasVoice);
+      
+      // Show force logout modal when device binding is revoked
+      setIsForceLogoutModalOpen(true);
+    } catch (error) {
+      if (handleSessionExpiry(error, setDeviceError)) return;
+      setDeviceError(error.message);
+    } finally {
+      setDeviceLoading(false);
+    }
+  };
 
   const toggleBalanceVisibility = (accountNumber) => {
     setBalanceVisibility((prev) => ({
@@ -450,19 +598,19 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
     event.preventDefault();
     if (!accessToken) return;
     if (!transferForm.sourceAccountId) {
-      setTransferStatus({ type: "error", message: "Select a source account." });
+      setTransferStatus({ type: "error", message: s.selectSourceAccount });
       return;
     }
 
     const destinationAccountNumber = transferForm.destinationAccountNumber.trim();
     if (!destinationAccountNumber) {
-      setTransferStatus({ type: "error", message: "Enter a destination account number." });
+      setTransferStatus({ type: "error", message: s.enterDestinationAccount });
       return;
     }
 
     const transferAmount = Number(transferForm.amount);
     if (!Number.isFinite(transferAmount) || transferAmount <= 0) {
-      setTransferStatus({ type: "error", message: "Enter a valid transfer amount." });
+      setTransferStatus({ type: "error", message: s.enterValidAmount });
       return;
     }
 
@@ -484,7 +632,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
           remarks: transferForm.remarks || undefined,
         },
       });
-      setTransferStatus({ type: "success", message: "Transfer initiated successfully." });
+      setTransferStatus({ type: "success", message: s.transferInitiated });
       setTransferForm((prev) => ({
         ...prev,
         destinationAccountNumber: "",
@@ -530,7 +678,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
       };
       const created = await createReminder({ accessToken, payload });
       setReminders((prev) => [created, ...prev]);
-      setReminderStatus({ type: "success", message: "Reminder created successfully." });
+      setReminderStatus({ type: "success", message: s.reminderCreated });
       setReminderForm((prev) => ({
         ...prev,
         message: "",
@@ -568,20 +716,6 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
     }
   };
 
-  const handleDeviceRevoke = async (bindingId) => {
-    if (!accessToken) return;
-    setDeviceLoading(true);
-    setDeviceError("");
-    try {
-      const updated = await revokeDeviceBinding({ accessToken, bindingId });
-      setDeviceBindings((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-    } catch (error) {
-      if (handleSessionExpiry(error, setDeviceError)) return;
-      setDeviceError(error.message);
-    } finally {
-      setDeviceLoading(false);
-    }
-  };
 
   if (!user) {
     return <Navigate to="/" replace />;
@@ -614,9 +748,12 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
           <SunHeader
             subtitle={`${branch.name} · ${branch.city}`}
             actionSlot={
-              <button type="button" className="ghost-btn" onClick={onSignOut}>
-                Log out
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                <LanguageToggle />
+                <button type="button" className="ghost-btn" onClick={onSignOut}>
+                  {s.logOut}
+                </button>
+              </div>
             }
           />
           
@@ -668,26 +805,56 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
             }}
           />
 
+          <VoiceEnrollmentModal
+            isOpen={isVoiceEnrollmentModalOpen}
+            onClose={() => setIsVoiceEnrollmentModalOpen(false)}
+            onConfirm={() => {
+              setIsVoiceEnrollmentModalOpen(false);
+              navigate("/device-binding");
+            }}
+            strings={{
+              addVoiceToAccount: s.addVoiceToAccount,
+              addVoicePrompt: s.addVoicePrompt,
+              addVoicePromptDescription: s.addVoicePromptDescription,
+              cancel: s.cancel,
+              okay: s.okay,
+            }}
+          />
+
+          <ForceLogoutModal
+            isOpen={isForceLogoutModalOpen}
+            onConfirm={() => {
+              setIsForceLogoutModalOpen(false);
+              onSignOut();
+            }}
+            strings={{
+              forceLogoutTitle: s.forceLogoutTitle,
+              forceLogoutMessage: s.forceLogoutMessage,
+              forceLogoutDescription: s.forceLogoutDescription,
+              okay: s.okay,
+            }}
+          />
+
           <main className="card-surface profile-surface">
             {(deviceBindingRequired || voiceEnrollmentRequired || voiceReverificationRequired) && (
               <section className="profile-card profile-card--span">
                 <div className="form-error">
                   <p>
                     {deviceBindingRequired
-                      ? "For secure banking, please bind this device and verify your voice."
+                      ? s.deviceBinding.forSecureBanking
                       : voiceEnrollmentRequired
-                        ? "Complete voice signature enrollment to finish device binding."
-                        : "Please refresh your voice signature to keep this device trusted."}
+                        ? s.deviceBinding.completeVoiceEnrollment
+                        : s.deviceBinding.refreshVoiceSignature}
                   </p>
                   <p className="profile-hint">
-                    Speak the passphrase: <strong>{voicePhrase}</strong>
+                    {s.deviceBinding.speakPassphraseLabel} <strong>{voicePhrase}</strong>
                   </p>
                   <button
                     type="button"
                     className="link-btn"
                     onClick={() => navigate("/device-binding")}
                   >
-                    Manage device & voice binding
+                    {s.deviceBinding.manageDeviceBinding}
                   </button>
                 </div>
               </section>
@@ -695,21 +862,35 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
 
             <section className="profile-hero">
               <div>
-                <p className="profile-eyebrow">Logged in as</p>
+                <p className="profile-eyebrow">{s.loggedInAs}</p>
                 <h1>{fullName}</h1>
-                <p className="profile-segment">{segment} banking customer</p>
-                <p className="profile-hint">Customer ID: {customerId}</p>
+                <p className="profile-segment">{segment} {s.bankingCustomer}</p>
+                <p className="profile-hint">{s.customerId} {customerId}</p>
               </div>
-              <div className="profile-pill">
-                <span className="status-dot status-dot--online" />
-                Voice session secured
-              </div>
+              {!checkingVoiceBinding && (
+                <div
+                  className={`profile-pill ${isVoiceSecured ? "profile-pill--secured" : "profile-pill--unsecured"}`}
+                  onClick={!isVoiceSecured ? () => setIsVoiceEnrollmentModalOpen(true) : undefined}
+                  style={!isVoiceSecured ? { cursor: "pointer" } : undefined}
+                  role={!isVoiceSecured ? "button" : undefined}
+                  tabIndex={!isVoiceSecured ? 0 : undefined}
+                  onKeyDown={!isVoiceSecured ? (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setIsVoiceEnrollmentModalOpen(true);
+                    }
+                  } : undefined}
+                >
+                  <span className={`status-dot ${isVoiceSecured ? "status-dot--online" : "status-dot--warning"}`} />
+                  {isVoiceSecured ? s.voiceSessionSecured : s.voiceSessionUnsecured}
+                </div>
+              )}
             </section>
 
             <section className="profile-grid">
               <article className="profile-card">
-                <h2>Account snapshot</h2>
-                {accountsLoading && <p className="profile-hint">Loading account details…</p>}
+                <h2>{s.accountSnapshot}</h2>
+                {accountsLoading && <p className="profile-hint">{s.loadingAccountDetails}</p>}
                 {accountsError && accountOptions.length === 0 && (
                   <div className="form-error">{accountsError}</div>
                 )}
@@ -737,19 +918,19 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                             className="link-btn"
                             onClick={() => toggleBalanceVisibility(account.accountNumber)}
                           >
-                            {isBalanceVisible ? "Hide" : "Show"}
+                            {isBalanceVisible ? s.hide : s.show}
                           </button>
                         </div>
                         {isBalanceVisible && account.availableBalance !== null && (
                           <p className="profile-hint">
-                            Available {formatCurrency(account.availableBalance, account.currency)}
+                            {s.available} {formatCurrency(account.availableBalance, account.currency)}
                           </p>
                         )}
                         {(account.debitCards.length > 0 || account.creditCards.length > 0) && (
                           <div className="account-card-groups">
                             {account.debitCards.length > 0 && (
                               <div>
-                                <p className="profile-label">Debit cards</p>
+                                <p className="profile-label">{s.debitCards}</p>
                                 <ul className="cards-list">
                                   {account.debitCards.slice(0, 5).map((card) => (
                                     <li key={card.id} className="card-pill">
@@ -765,7 +946,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                             )}
                             {account.creditCards.length > 0 && (
                               <div>
-                                <p className="profile-label">Credit cards</p>
+                                <p className="profile-label">{s.creditCards}</p>
                                 <ul className="cards-list">
                                   {account.creditCards.slice(0, 5).map((card) => (
                                     <li key={card.id} className="card-pill">
@@ -786,23 +967,23 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                   })}
                 </ul>
                 {accountCards.length > 5 && (
-                  <p className="profile-hint">Showing 5 of {accountCards.length} accounts.</p>
+                  <p className="profile-hint">{s.showingAccounts} {accountCards.length} {s.accounts}</p>
                 )}
               </article>
 
               <article className="profile-card">
-                <h2>Session insights</h2>
+                <h2>{s.sessionInsights}</h2>
                 <div className="profile-meta">
                   <div>
-                    <p className="profile-label">Last voice login</p>
+                    <p className="profile-label">{s.lastVoiceLogin}</p>
                     <p className="profile-value">
-                      {formattedLastLogin ?? "No recent login recorded"}
+                      {formattedLastLogin ?? s.noRecentLogin}
                     </p>
                   </div>
                   <div>
-                    <p className="profile-label">Next reminder</p>
+                    <p className="profile-label">{s.nextReminder}</p>
                     <p className="profile-value">
-                      {nextReminder?.label ?? "No reminders configured"}
+                      {nextReminder?.label ?? s.noRemindersConfigured}
                     </p>
                     {formattedReminder && <p className="profile-hint">{formattedReminder}</p>}
                   </div>
@@ -810,7 +991,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
               </article>
 
               <article className="profile-card profile-card--span">
-                <h2>Quick actions</h2>
+                <h2>{s.quickActions}</h2>
                 <div className="quick-actions">
                   <button
                     type="button"
@@ -818,7 +999,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                     onClick={() => handlePanelToggle("balance")}
                     disabled={!canPerformActions}
                   >
-                    Check balances
+                    {s.checkBalances}
                   </button>
                   <button
                     type="button"
@@ -826,7 +1007,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                     onClick={() => handlePanelToggle("transfer")}
                     disabled={!canPerformActions}
                   >
-                    Make a transfer
+                    {s.makeTransfer}
                   </button>
                   <button
                     type="button"
@@ -834,7 +1015,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                     onClick={() => handlePanelToggle("transactions")}
                     disabled={!canPerformActions}
                   >
-                    Review transactions
+                    {s.reviewTransactions}
                   </button>
                   <button
                     type="button"
@@ -842,7 +1023,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                     onClick={() => handlePanelToggle("reminders")}
                     disabled={!canPerformActions}
                   >
-                    Manage reminders
+                    {s.manageReminders}
                   </button>
                   <button
                     type="button"
@@ -850,24 +1031,24 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                     onClick={() => handlePanelToggle("beneficiaries")}
                     disabled={!canPerformActions}
                   >
-                    Beneficiaries
+                    {s.beneficiaries}
                   </button>
                   <button
                     type="button"
                     className="secondary-btn"
                     onClick={() => handlePanelToggle("deviceBinding")}
                   >
-                    Trusted devices
+                    {s.trustedDevices}
                   </button>
                 </div>
               </article>
 
               {panels.balance && (
                 <article id="panel-balance" className="profile-card profile-card--span">
-                  <h2>Balance enquiry</h2>
+                  <h2>{s.balanceEnquiry}</h2>
                   <form className="form-grid" onSubmit={handleBalanceSubmit}>
                     <label htmlFor="balance-account">
-                      Account
+                      {s.account}
                       <select
                         id="balance-account"
                         value={balanceAccountId}
@@ -882,25 +1063,25 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                       </select>
                     </label>
                     <button type="submit" className="primary-btn primary-btn--compact" disabled={balanceLoading}>
-                      {balanceLoading ? "Checking…" : "View balance"}
+                      {balanceLoading ? s.checking : s.viewBalance}
                     </button>
                   </form>
                   {balanceError && <div className="form-error">{balanceError}</div>}
                   {balanceResult && (
                     <div className="balance-result">
                       <p>
-                        Ledger balance: {" "}
+                        {s.ledgerBalance}{" "}
                         <strong>
                           {formatCurrency(balanceResult.ledgerBalance, balanceResult.currency)}
                         </strong>
                       </p>
                       <p>
-                        Available balance: {" "}
+                        {s.availableBalance}{" "}
                         <strong>
                           {formatCurrency(balanceResult.availableBalance, balanceResult.currency)}
                         </strong>
                       </p>
-                      <p className="profile-hint">Status: {balanceResult.status}</p>
+                      <p className="profile-hint">{s.status} {balanceResult.status}</p>
                     </div>
                   )}
                 </article>
@@ -908,10 +1089,10 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
 
               {panels.transfer && (
                 <article id="panel-transfer" className="profile-card profile-card--span">
-                  <h2>Internal transfer</h2>
+                  <h2>{s.internalTransfer}</h2>
                   <form className="form-grid" onSubmit={handleTransferSubmit}>
                     <label htmlFor="transfer-source">
-                      From account
+                      {s.fromAccount}
                       <select
                         id="transfer-source"
                         name="sourceAccountId"
@@ -927,7 +1108,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                       </select>
                     </label>
                     <label htmlFor="transfer-destination">
-                      Destination account number
+                      {s.destinationAccountNumber}
                       <input
                         id="transfer-destination"
                         type="text"
@@ -939,14 +1120,14 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                     </label>
                     {beneficiaryOptions.length > 0 && (
                       <label htmlFor="transfer-beneficiary">
-                        Saved beneficiary (optional)
+                        {s.savedBeneficiary}
                         <select
                           id="transfer-beneficiary"
                           name="beneficiaryId"
                           value={transferForm.beneficiaryId}
                           onChange={handleTransferChange}
                         >
-                          <option value="">Select beneficiary</option>
+                          <option value="">{s.selectBeneficiary}</option>
                           {beneficiaryOptions.map((option) => (
                             <option key={option.id} value={option.id}>
                               {option.name} · {option.accountNumber}
@@ -956,7 +1137,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                       </label>
                     )}
                     <label htmlFor="transfer-amount">
-                      Amount (INR)
+                      {s.amount}
                       <input
                         id="transfer-amount"
                         type="number"
@@ -969,17 +1150,17 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                       />
                     </label>
                     <label htmlFor="transfer-remarks" className="form-grid--span">
-                      Remarks
+                      {s.remarks}
                       <textarea
                         id="transfer-remarks"
                         name="remarks"
                         value={transferForm.remarks}
                         onChange={handleTransferChange}
-                        placeholder="Optional narration"
+                        placeholder={s.optionalNarration}
                       />
                     </label>
                     <button type="submit" className="primary-btn primary-btn--compact" disabled={transferLoading}>
-                      {transferLoading ? "Processing…" : "Initiate transfer"}
+                      {transferLoading ? s.processing : s.initiateTransfer}
                     </button>
                   </form>
                   {transferStatus && (
@@ -996,14 +1177,14 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
 
               {panels.beneficiaries && (
                 <article id="panel-beneficiaries" className="profile-card profile-card--span">
-                  <h2>Beneficiaries</h2>
+                  <h2>{s.beneficiariesTitle}</h2>
                   {beneficiariesError && <div className="form-error">{beneficiariesError}</div>}
-                  {beneficiariesLoading && <p>Loading beneficiaries…</p>}
+                  {beneficiariesLoading && <p>{s.loadingAccountDetails}</p>}
                   {!beneficiariesLoading && !beneficiariesError && (
                     <>
                       {displayedBeneficiaries.length === 0 ? (
                         <p className="profile-hint">
-                          No beneficiaries added yet. Add one to speed up transfers.
+                          {s.noBeneficiariesYet}
                         </p>
                       ) : (
                         <ul className="beneficiary-mini-list">
@@ -1016,7 +1197,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                                   const lastUsed = formatDateTime(item.lastUsedAt);
                                   if (!lastUsed) return null;
                                   return (
-                                    <p className="beneficiary-mini-list__meta">Last used {lastUsed}</p>
+                                    <p className="beneficiary-mini-list__meta">{s.lastUsed || "Last used"} {lastUsed}</p>
                                   );
                                 })()}
                               </div>
@@ -1030,7 +1211,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                           className="secondary-btn"
                           onClick={() => navigate("/beneficiaries")}
                         >
-                          View all beneficiaries
+                          {s.viewAllBeneficiaries}
                         </button>
                       </div>
                     </>
@@ -1040,11 +1221,11 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
 
               {panels.deviceBinding && (
                 <article id="panel-device-binding" className="profile-card profile-card--span">
-                  <h2>Trusted devices</h2>
-                  {deviceLoading && <p className="profile-hint">Loading device bindings…</p>}
+                  <h2>{s.deviceBinding.title}</h2>
+                  {deviceLoading && <p className="profile-hint">{s.deviceBinding.loading}</p>}
                   {deviceError && <div className="form-error">{deviceError}</div>}
                   {!deviceLoading && deviceBindings.length === 0 && (
-                    <p className="profile-hint">No trusted devices found. Use Manage device &amp; voice binding to add this device.</p>
+                    <p className="profile-hint">{s.deviceBinding.noDevices}</p>
                   )}
                   {!deviceLoading && deviceBindings.length > 0 && (
                     <ul className="transactions-list">
@@ -1054,7 +1235,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                             <p className="profile-label">{binding.deviceLabel ?? "Unnamed device"}</p>
                             <p className="profile-value">{binding.platform ?? "unknown"} · Trust {binding.trustLevel}</p>
                             <p className="profile-hint">
-                              Last verified: {binding.lastVerifiedAt ? new Date(binding.lastVerifiedAt).toLocaleString("en-IN") : "Never"}
+                              {s.deviceBinding.lastVerified} {binding.lastVerifiedAt ? new Date(binding.lastVerifiedAt).toLocaleString("en-IN") : s.deviceBinding.never}
                             </p>
                           </div>
                           <div className="profile-account-actions">
@@ -1065,10 +1246,10 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                                 onClick={() => handleDeviceRevoke(binding.id)}
                                 disabled={deviceLoading}
                               >
-                                Revoke
+                                {s.deviceBinding.revoke}
                               </button>
                             ) : (
-                              <span className="profile-hint">Revoked</span>
+                              <span className="profile-hint">{s.deviceBinding.revoked}</span>
                             )}
                           </div>
                         </li>
@@ -1081,7 +1262,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                       className="link-btn"
                       onClick={() => navigate("/device-binding")}
                     >
-                      Manage device &amp; voice binding
+                      {s.deviceBinding.manageDeviceBinding}
                     </button>
                   </div>
                 </article>
@@ -1089,7 +1270,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
 
               {panels.reminders && (
                 <article id="panel-reminders" className="profile-card profile-card--span">
-                  <h2>Reminders</h2>
+                  <h2>{s.reminders}</h2>
                   {remindersError && <div className="form-error">{remindersError}</div>}
                   {reminderStatus && (
                     <div
@@ -1102,7 +1283,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                   )}
                   <form className="form-grid" onSubmit={handleReminderSubmit}>
                     <label htmlFor="reminder-type">
-                      Type
+                      {s.type}
                       <select
                         id="reminder-type"
                         name="reminderType"
@@ -1116,7 +1297,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                       </select>
                     </label>
                     <label htmlFor="reminder-when">
-                      Remind at
+                      {s.remindAt}
                       <input
                         id="reminder-when"
                         type="datetime-local"
@@ -1127,7 +1308,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                       />
                     </label>
                     <label htmlFor="reminder-message" className="form-grid--span">
-                      Message
+                      {s.message}
                       <textarea
                         id="reminder-message"
                         name="message"
@@ -1137,14 +1318,14 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                       />
                     </label>
                     <label htmlFor="reminder-account">
-                      Linked account
+                      {s.linkedAccount}
                       <select
                         id="reminder-account"
                         name="accountId"
                         value={reminderForm.accountId}
                         onChange={handleReminderChange}
                       >
-                        <option value="">None</option>
+                        <option value="">{s.none}</option>
                         {accountOptions.map((option) => (
                           <option key={option.id} value={option.id}>
                             {option.number}
@@ -1153,7 +1334,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                       </select>
                     </label>
                     <label htmlFor="reminder-channel">
-                      Channel
+                      {s.channel}
                       <select
                         id="reminder-channel"
                         name="channel"
@@ -1166,18 +1347,18 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                       </select>
                     </label>
                     <label htmlFor="reminder-recurrence">
-                      Recurrence rule
+                      {s.recurrenceRule}
                       <input
                         id="reminder-recurrence"
                         type="text"
                         name="recurrenceRule"
                         value={reminderForm.recurrenceRule}
                         onChange={handleReminderChange}
-                        placeholder="Optional RFC 5545 RRULE"
+                        placeholder={s.optionalRrule}
                       />
                     </label>
                     <button type="submit" className="primary-btn primary-btn--compact" disabled={remindersLoading}>
-                      {remindersLoading ? "Creating…" : "Create reminder"}
+                      {remindersLoading ? s.creating : s.createReminder}
                     </button>
                   </form>
                   <ul className="reminders-list">
@@ -1196,14 +1377,14 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                             className="link-btn"
                             onClick={() => handleReminderStatusUpdate(reminder.id, "sent")}
                           >
-                            Mark sent
+                            {s.markSent}
                           </button>
                         )}
                       </li>
                     ))}
                     {displayedReminders.length === 0 && !remindersLoading && (
                       <li>
-                        <p className="profile-hint">No reminders configured yet.</p>
+                        <p className="profile-hint">{s.noRemindersYet}</p>
                       </li>
                     )}
                   </ul>
@@ -1214,7 +1395,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                         className="link-btn"
                         onClick={() => navigate("/reminders")}
                       >
-                        View all reminders
+                        {s.viewAllReminders}
                       </button>
                     </div>
                   )}
@@ -1223,10 +1404,10 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
 
               {panels.transactions && (
                 <article id="panel-transactions" className="profile-card profile-card--span">
-                  <h2>Recent transactions</h2>
+                  <h2>{s.recentTransactions}</h2>
                   <div className="form-grid">
                     <label htmlFor="transactions-account">
-                      Account
+                      {s.account}
                       <select
                         id="transactions-account"
                         value={selectedTxnAccountId}
@@ -1241,10 +1422,10 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                     </label>
                   </div>
                   {selectedTxnAccountNumber && (
-                    <p className="profile-hint">Account • {selectedTxnAccountNumber}</p>
+                    <p className="profile-hint">{s.account} • {selectedTxnAccountNumber}</p>
                   )}
                   {transactionsError && <div className="form-error">{transactionsError}</div>}
-                  {transactionsLoading && <p className="profile-hint">Fetching transactions…</p>}
+                  {transactionsLoading && <p className="profile-hint">{s.fetchingTransactions}</p>}
                   {!transactionsLoading && transactions.length > 0 && (
                     <ul className="transactions-list">
                       {transactions.map((txn) => (
@@ -1264,7 +1445,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                   )}
                   {!transactionsLoading && !transactionsError && transactions.length === 0 && (
                     <p className="profile-hint">
-                      Select an account above to view the latest five transactions.
+                      {s.selectAccountToView}
                     </p>
                   )}
                   <div className="transactions-actions">
@@ -1281,7 +1462,7 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                         }
                       }}
                     >
-                      View all transactions
+                      {s.viewAllTransactions}
                     </button>
                   </div>
                 </article>

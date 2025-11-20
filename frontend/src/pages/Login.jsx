@@ -3,6 +3,8 @@ import PropTypes from "prop-types";
 import { Link, Navigate } from "react-router-dom";
 
 import SunHeader from "../components/SunHeader.jsx";
+import { getLoginStrings, getVoicePhrase } from "../config/loginStrings.js";
+import { getPreferredLanguage, setPreferredLanguage } from "../utils/preferences.js";
 
 const verifyPasswordLocally = (inputPassword) => inputPassword.trim().length >= 4;
 
@@ -71,18 +73,27 @@ const convertBlobToWav = async (blob) => {
 };
 
 const MAX_RECORDING_MS = 7000;
-const VOICE_PHRASE_HINDI = "सन बैंक मेरा साथी, हर कदम सुरक्षित बैंकिंग का वादा";
-const VOICE_PHRASE_ENGLISH = "Sun Bank is my companion, a promise of secure banking at every step";
-const VOICE_PHRASE = `${VOICE_PHRASE_HINDI} or ${VOICE_PHRASE_ENGLISH}`;
 const FIXED_OTP = "12345";
+const SUPPORTED_LOGIN_LANGUAGES = ["en-IN", "hi-IN"];
 
 const Login = ({ onAuthenticate, authenticated }) => {
+  // Language state - default to user's preferred language or English
+  const [loginLanguage, setLoginLanguage] = useState(() => {
+    const preferred = getPreferredLanguage();
+    return SUPPORTED_LOGIN_LANGUAGES.includes(preferred) ? preferred : "en-IN";
+  });
+  
+  // Get localized strings for current language
+  const strings = getLoginStrings(loginLanguage);
+  const voicePhrase = getVoicePhrase(loginLanguage);
+  
   const [authMode, setAuthMode] = useState("password");
   const [userId, setUserId] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isVerifyingVoice, setIsVerifyingVoice] = useState(false);
   const [awaitingOtp, setAwaitingOtp] = useState(false);
   const [otp, setOtp] = useState("");
   const [showOtp, setShowOtp] = useState(false);
@@ -101,6 +112,13 @@ const Login = ({ onAuthenticate, authenticated }) => {
   const recordingTimerRef = useRef(null);
   const recordingStartRef = useRef(null);
   const isFirstVoiceLogin = authMode === "voice" && userId.trim() && !isVoiceEnrolled;
+  
+  // Toggle language between Hindi and English
+  const toggleLanguage = () => {
+    const newLanguage = loginLanguage === "en-IN" ? "hi-IN" : "en-IN";
+    setLoginLanguage(newLanguage);
+    setPreferredLanguage(newLanguage);
+  };
 
   useEffect(
     () => () => {
@@ -133,7 +151,7 @@ const Login = ({ onAuthenticate, authenticated }) => {
         enrolled = false;
       }
       setIsVoiceEnrolled(enrolled);
-      resetVoiceCapture(enrolled ? 2 : 1);
+      resetVoiceCapture(1); // Always use step 1 - no double recording needed
       requestAnimationFrame(() => {
         if (voiceSectionRef.current) {
           voiceSectionRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -191,7 +209,7 @@ const Login = ({ onAuthenticate, authenticated }) => {
       setError("");
     }
     if (!navigator.mediaDevices?.getUserMedia) {
-      setRecordingStatus("Microphone access is not supported on this device.");
+      setRecordingStatus(strings.voiceLogin.recording.statusNotSupported);
       return;
     }
 
@@ -201,7 +219,7 @@ const Login = ({ onAuthenticate, authenticated }) => {
     }
     setRecordingProgress(0);
 
-    setRecordingStatus("Requesting microphone access…");
+    setRecordingStatus(strings.voiceLogin.recording.statusRequesting);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
@@ -225,34 +243,22 @@ const Login = ({ onAuthenticate, authenticated }) => {
           // debug: log wavBlob info
           // eslint-disable-next-line no-console
           console.debug("recorder.onstop: wavBlob", { size: wavBlob.size, type: wavBlob.type, duration });
-          if (voiceCaptureStep === 1) {
-            setFirstVoiceSummary(`Sample 1 ready · ${(duration ?? 0).toFixed(1)}s`);
-            setRecordingStatus(
-              'First sample captured. Please re-record the passphrase to confirm your voice.',
-            );
-            setVoiceCaptureStep(2);
-            setVoiceBlob(null);
-            setVoiceSummary("");
-          } else {
-            setVoiceBlob(wavBlob);
-            // make blob reachable from devtools for quick inspection
-            try {
-              // eslint-disable-next-line no-undef
-              window.__lastVoiceBlob = wavBlob;
-            } catch {
-              // ignore
-            }
-            const label =
-              isFirstVoiceLogin && voiceCaptureStep === 2
-                ? `Sample 2 ready · ${(duration ?? 0).toFixed(1)}s`
-                : `Sample ready · ${(duration ?? 0).toFixed(1)}s`;
-            setVoiceSummary(label);
-            setRecordingStatus("Voice sample confirmed. You can proceed to login.");
+          // Always use the first recording - no double recording needed
+          setVoiceBlob(wavBlob);
+          // make blob reachable from devtools for quick inspection
+          try {
+            // eslint-disable-next-line no-undef
+            window.__lastVoiceBlob = wavBlob;
+          } catch {
+            // ignore
           }
+          const label = `${strings.voiceLogin.controls.sampleReady} · ${(duration ?? 0).toFixed(1)}s`;
+          setVoiceSummary(label);
+          setRecordingStatus(""); // Clear status - don't show "confirmed" until login is clicked
           setRecordingProgress(1);
         } catch (processingError) {
           setRecordingStatus(
-            processingError?.message || "Unable to process the voice sample.",
+            processingError?.message || strings.voiceLogin.recording.statusError,
           );
         } finally {
           stream.getTracks().forEach((track) => track.stop());
@@ -267,11 +273,7 @@ const Login = ({ onAuthenticate, authenticated }) => {
         const elapsed = Date.now() - recordingStartRef.current;
         setRecordingProgress(Math.min(elapsed / MAX_RECORDING_MS, 1));
       }, 60);
-      if (voiceCaptureStep === 1) {
-    setRecordingStatus(`Recording… Speak clearly: "${VOICE_PHRASE_HINDI}" or "${VOICE_PHRASE_ENGLISH}"`);
-      } else {
-        setRecordingStatus("Recording… Speak naturally in your own words.");
-      }
+      setRecordingStatus(strings.voiceLogin.recording.statusNormal);
       setTimeout(() => {
         if (mediaRecorderRef.current === recorder && recorder.state === "recording") {
           stopRecording();
@@ -284,12 +286,12 @@ const Login = ({ onAuthenticate, authenticated }) => {
         recordingTimerRef.current = null;
       }
       setRecordingStatus(
-        permissionError?.message || "Microphone permission denied by the browser.",
+        permissionError?.message || strings.voiceLogin.recording.statusPermissionDenied,
       );
     }
   };
 
-  const credentialInputsDisabled = awaitingOtp || isSubmitting;
+  const credentialInputsDisabled = awaitingOtp || isSubmitting || isVerifyingVoice;
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -301,18 +303,16 @@ const Login = ({ onAuthenticate, authenticated }) => {
       // eslint-disable-next-line no-console
       console.debug("handleSubmit: voiceBlob", { voiceBlob, voiceCaptureStep, recordingState, voiceSummary });
       if (!userId.trim()) {
-        setError("Please enter your User ID to continue.");
+        setError(strings.errors.noUserId);
         return;
       }
       if (authMode === "password") {
         if (!verifyPasswordLocally(password)) {
-          setError("Enter a valid password (minimum 4 characters).");
+          setError(strings.errors.invalidPassword);
           return;
         }
       } else if (!voiceBlob) {
-        setError(
-          "Please capture and confirm your voice sample before continuing. (If this is your first time enrolling for voice login, record the passphrase twice.)",
-        );
+        setError(strings.voiceLogin.errors.noVoiceSample);
         return;
       }
 
@@ -324,16 +324,25 @@ const Login = ({ onAuthenticate, authenticated }) => {
 
       if (authMode === "voice") {
         validationPayload.voiceSampleBlob = voiceBlob;
+        setIsVerifyingVoice(true);
+        setRecordingStatus(strings.voiceLogin.recording.statusConfirmed); // Show confirmation message when verification starts
       }
 
-      const preliminary = await onAuthenticate({
-        ...validationPayload,
-        validateOnly: true,
-      });
+      try {
+        const preliminary = await onAuthenticate({
+          ...validationPayload,
+          validateOnly: true,
+        });
 
-      if (!preliminary?.success) {
-        setError(preliminary?.message || "Credentials could not be verified. Try again.");
-        return;
+        if (!preliminary?.success) {
+          setError(preliminary?.message || strings.errors.credentialsError);
+          setRecordingStatus(""); // Clear status on error
+          return;
+        }
+      } finally {
+        if (authMode === "voice") {
+          setIsVerifyingVoice(false);
+        }
       }
 
       setAwaitingOtp(true);
@@ -343,11 +352,16 @@ const Login = ({ onAuthenticate, authenticated }) => {
     }
 
     if (otp.trim() !== FIXED_OTP) {
-      setError("The OTP you entered is incorrect. Please try again.");
+      setError(strings.errors.invalidOtp);
       return;
     }
 
     setIsSubmitting(true);
+    // Don't show "verifying voice" during OTP submission - voice was already verified in preliminary step
+    // Only show it if we're doing voice verification (not in OTP step)
+    if (authMode === "voice" && !awaitingOtp) {
+      setIsVerifyingVoice(true);
+    }
 
     try {
       const authPayload = {
@@ -364,7 +378,7 @@ const Login = ({ onAuthenticate, authenticated }) => {
       const result = await onAuthenticate(authPayload);
 
       if (!result?.success) {
-        setError(result?.message || "We could not verify those credentials. Try again.");
+        setError(result?.message || strings.errors.authError);
         setAwaitingOtp(false);
       } else if (authMode === "voice" && userId.trim()) {
         setIsVoiceEnrolled(true);
@@ -372,12 +386,15 @@ const Login = ({ onAuthenticate, authenticated }) => {
       }
     } catch (authError) {
       setError(
-        authError?.message ||
-          "Something went wrong while contacting the bank. Please try again.",
+        authError?.message || strings.errors.serverError,
       );
       setAwaitingOtp(false);
     } finally {
       setIsSubmitting(false);
+      // Only reset voice verification state if it was set
+      if (authMode === "voice" && !awaitingOtp) {
+        setIsVerifyingVoice(false);
+      }
     }
   };
 
@@ -394,8 +411,27 @@ const Login = ({ onAuthenticate, authenticated }) => {
           <SunHeader subtitle="Voice-first banking, made human." />
           <main className="card-surface">
             <div className="card-hero">
-              <h1>Welcome back.</h1>
-              <p>Sign in to continue to your Sun National Bank profile.</p>
+              <div className="card-hero__header">
+                <h1>{strings.general.welcomeTitle}</h1>
+                <div className="login-language-toggle">
+                  <button
+                    type="button"
+                    className="language-toggle-btn"
+                    onClick={toggleLanguage}
+                    disabled={credentialInputsDisabled || recordingState === "recording"}
+                    aria-label={strings.languageToggle.ariaLabel}
+                  >
+                    <span className="language-toggle-btn__flag">
+                      {loginLanguage === "en-IN" ? "🇮🇳" : "🇮🇳"}
+                    </span>
+                    <span className="language-toggle-btn__text">
+                      {strings.languageToggle.targetLanguage}
+                    </span>
+                    <span className="language-toggle-btn__arrow">⇄</span>
+                  </button>
+                </div>
+              </div>
+              <p>{strings.general.welcomeSubtitle}</p>
             </div>
             <div className="login-mode-switch">
               <button
@@ -404,7 +440,7 @@ const Login = ({ onAuthenticate, authenticated }) => {
                 onClick={() => !credentialInputsDisabled && setAuthMode("password")}
                 disabled={credentialInputsDisabled}
               >
-                Password
+                {strings.general.passwordLabel}
               </button>
               <button
                 type="button"
@@ -412,18 +448,18 @@ const Login = ({ onAuthenticate, authenticated }) => {
                 onClick={() => !credentialInputsDisabled && setAuthMode("voice")}
                 disabled={credentialInputsDisabled}
               >
-                Voice
+                {strings.general.voiceLabel}
               </button>
             </div>
             <form className="card-form" onSubmit={handleSubmit} noValidate>
               <label htmlFor="userId">
-                User ID
+                {strings.general.userIdLabel}
                 <input
                   id="userId"
                   name="userId"
                   type="text"
                   autoComplete="username"
-                  placeholder="Enter your customer ID"
+                  placeholder={strings.general.userIdPlaceholder}
                   value={userId}
                   onChange={(event) => setUserId(event.target.value)}
                   disabled={credentialInputsDisabled}
@@ -431,14 +467,14 @@ const Login = ({ onAuthenticate, authenticated }) => {
               </label>
               {authMode === "password" && (
                 <label htmlFor="password" className="input-with-toggle">
-                  Password
+                  {strings.general.passwordLabel}
                   <div className="input-with-toggle__wrapper">
                     <input
                       id="password"
                       name="password"
                       type={showPassword ? "text" : "password"}
                       autoComplete="current-password"
-                      placeholder="Enter your password"
+                      placeholder={strings.general.passwordPlaceholder}
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
                       disabled={credentialInputsDisabled}
@@ -447,38 +483,37 @@ const Login = ({ onAuthenticate, authenticated }) => {
                       type="button"
                       className="input-with-toggle__btn"
                       onClick={() => setShowPassword((prev) => !prev)}
-                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      aria-label={showPassword ? strings.general.hidePassword : strings.general.showPassword}
                     >
-                      {showPassword ? "Hide" : "Show"}
+                      {showPassword ? strings.general.hidePassword : strings.general.showPassword}
                     </button>
                   </div>
                 </label>
               )}
               {authMode === "voice" && (
                 <div className="card-form__voice" ref={voiceSectionRef}>
-                  {isFirstVoiceLogin ? (
-                    <div className="info-banner">
-                      First time with voice login? We’ll capture the passphrase
-                      <strong> {VOICE_PHRASE_HINDI}</strong> or <strong> {VOICE_PHRASE_ENGLISH}</strong>
-                      twice to enroll your voice securely. From the next login you can speak any short phrase.
-                    </div>
-                  ) : (
-                    <p className="profile-hint">
-                      Speak in your normal voice—any short phrase works for quick verification.
+                  <div className="voice-reference-box">
+                    <p className="voice-reference-box__header">
+                      {strings.voiceLogin.referenceBox.header}
                     </p>
-                  )}
+                    <div className="voice-reference-box__line">
+                      <span className="voice-reference-box__label">
+                        {strings.voiceLogin.referenceBox.languageLabel}
+                      </span>
+                      <span className="voice-reference-box__phrase">{voicePhrase}</span>
+                    </div>
+                  </div>
                   <div className="voice-controls">
                     <button
                       className="secondary-btn"
                       type="button"
                       onClick={recordingState === "recording" ? stopRecording : startRecording}
-                      disabled={credentialInputsDisabled}
+                      disabled={credentialInputsDisabled || isVerifyingVoice}
                     >
-                      {recordingState === "recording" ? "Stop recording" : "Record voice sample"}
+                      {recordingState === "recording" 
+                        ? strings.voiceLogin.controls.stopButton 
+                        : strings.voiceLogin.controls.recordButton}
                     </button>
-                    {voiceCaptureStep === 2 && !voiceBlob && firstVoiceSummary && (
-                      <span className="profile-hint">{firstVoiceSummary}</span>
-                    )}
                     {voiceSummary && voiceBlob && (
                       <span className="profile-hint">
                         {voiceSummary}
@@ -486,10 +521,18 @@ const Login = ({ onAuthenticate, authenticated }) => {
                     )}
                     {voiceBlob && (
                       <span className="profile-hint">
-                        Captured {Math.round(voiceBlob.size / 1024)} KB
+                        {strings.voiceLogin.controls.captured} {Math.round(voiceBlob.size / 1024)} KB
                       </span>
                     )}
                   </div>
+                  {isVerifyingVoice && !awaitingOtp && (
+                    <div className="voice-verification-loader">
+                      <div className="loader-spinner"></div>
+                      <p className="voice-verification-message">
+                        {strings.general.verifyingVoice}
+                      </p>
+                    </div>
+                  )}
                   {recordingState === "recording" && (
                     <div className="voice-meter">
                       <div className="voice-meter__wave" aria-hidden="true" />
@@ -515,19 +558,19 @@ const Login = ({ onAuthenticate, authenticated }) => {
                     onClick={() => resetVoiceCapture(1, true)}
                     disabled={credentialInputsDisabled}
                   >
-                    Reset voice capture
+                    {strings.voiceLogin.controls.resetButton}
                   </button>
                 </div>
               )}
               {awaitingOtp && (
                 <label htmlFor="otp" className="input-with-toggle">
-                  Enter OTP
+                  {strings.general.otpLabel}
                   <div className="input-with-toggle__wrapper">
                     <input
                       id="otp"
                       name="otp"
                       type={showOtp ? "text" : "password"}
-                      placeholder="Enter the 5-digit OTP"
+                      placeholder={strings.general.otpPlaceholder}
                       value={otp}
                       onChange={(event) => setOtp(event.target.value)}
                       ref={otpInputRef}
@@ -536,17 +579,22 @@ const Login = ({ onAuthenticate, authenticated }) => {
                       type="button"
                       className="input-with-toggle__btn"
                       onClick={() => setShowOtp((prev) => !prev)}
-                      aria-label={showOtp ? "Hide OTP" : "Show OTP"}
+                      aria-label={showOtp ? strings.general.hideOtp : strings.general.showOtp}
+                      disabled={credentialInputsDisabled}
                     >
-                      {showOtp ? "Hide" : "Show"}
+                      {showOtp ? strings.general.hideOtp : strings.general.showOtp}
                     </button>
                   </div>
                 </label>
               )}
               {error && <div className="form-error">{error}</div>}
               <div className="card-form__actions">
-                <button className="primary-btn" type="submit" disabled={isSubmitting}>
-                  {awaitingOtp ? (isSubmitting ? "Verifying…" : "Verify OTP") : "Log in"}
+                <button className="primary-btn" type="submit" disabled={isSubmitting || isVerifyingVoice}>
+                  {isVerifyingVoice 
+                    ? strings.general.verifyingVoice
+                    : awaitingOtp 
+                      ? (isSubmitting ? strings.general.verifying : strings.general.verifyOtpButton) 
+                      : strings.general.loginButton}
                 </button>
                 {awaitingOtp && (
                   <button
@@ -555,14 +603,14 @@ const Login = ({ onAuthenticate, authenticated }) => {
                     onClick={handleCancelOtp}
                     disabled={isSubmitting}
                   >
-                    Edit details
+                    {strings.general.editDetails}
                   </button>
                 )}
               </div>
               {!awaitingOtp && (
                 <div className="card-form__meta">
                   <Link className="muted-link" to="/sign-in-help">
-                    Need help signing in?
+                    {strings.general.needHelp}
                   </Link>
                 </div>
               )}

@@ -3,7 +3,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import SunHeader from "../components/SunHeader.jsx";
+import LanguageToggle from "../components/LanguageToggle.jsx";
 import { fetchAccounts, fetchTransactions } from "../api/client.js";
+import { usePageLanguage } from "../hooks/usePageLanguage.js";
 
 const STATEMENT_FETCH_LIMIT = 500;
 const RBI_MAX_STATEMENT_DAYS = 365;
@@ -150,6 +152,8 @@ const SESSION_EXPIRY_CODES = new Set([
 const TransactionsPage = ({ session, onSignOut }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { strings } = usePageLanguage();
+  const s = strings.transactions;
 
   const isAuthenticated = Boolean(session?.authenticated);
   const accessToken = session?.accessToken ?? "";
@@ -169,7 +173,7 @@ const TransactionsPage = ({ session, onSignOut }) => {
   const handleSessionExpiry = useCallback(
     (error, setter) => {
       if (error?.code && SESSION_EXPIRY_CODES.has(error.code)) {
-        const message = "Your session expired due to inactivity. Please sign in again.";
+        const message = s.sessionExpired || "Your session expired due to inactivity. Please sign in again.";
         if (typeof setter === "function") {
           setter(message);
         }
@@ -252,17 +256,17 @@ const TransactionsPage = ({ session, onSignOut }) => {
 
   const handleDownloadStatement = async () => {
     if (!selectedAccountId || !selectedAccount) {
-      setStatementStatus({ type: "error", message: "Select an account to download a statement." });
+      setStatementStatus({ type: "error", message: s.selectAccountToDownload });
       return;
     }
     if (!statementFrom || !statementTo) {
-      setStatementStatus({ type: "error", message: "Choose both from and to dates." });
+      setStatementStatus({ type: "error", message: s.chooseBothDates });
       return;
     }
     if (statementFrom > statementTo) {
       setStatementStatus({
         type: "error",
-        message: "The start date must be before the end date.",
+        message: s.startDateBeforeEnd,
       });
       return;
     }
@@ -270,7 +274,7 @@ const TransactionsPage = ({ session, onSignOut }) => {
     const fromDateObj = toIsoRangeBoundary(statementFrom, false);
     const toDateObj = toIsoRangeBoundary(statementTo, true);
     if (!fromDateObj || !toDateObj) {
-      setStatementStatus({ type: "error", message: "Invalid date range provided." });
+      setStatementStatus({ type: "error", message: s.invalidDateRange });
       return;
     }
 
@@ -287,7 +291,7 @@ const TransactionsPage = ({ session, onSignOut }) => {
     const fromIso = toIsoStringBoundary(fromDateObj, false);
     const toIso = toIsoStringBoundary(toDateObj, true);
     if (!fromIso || !toIso) {
-      setStatementStatus({ type: "error", message: "Invalid date range provided." });
+      setStatementStatus({ type: "error", message: s.invalidDateRange });
       return;
     }
 
@@ -328,8 +332,8 @@ const TransactionsPage = ({ session, onSignOut }) => {
         type: "success",
         message:
           statementTxns.length >= STATEMENT_FETCH_LIMIT
-            ? `Statement downloaded with the most recent ${STATEMENT_FETCH_LIMIT} transactions. For older entries, please download another period.`
-            : `Statement downloaded with ${statementTxns.length} transaction(s).`,
+            ? `${s.mostRecent} ${STATEMENT_FETCH_LIMIT} ${s.transactionsLimit}`
+            : `${s.statementDownloaded} ${statementTxns.length} ${s.transaction}`,
       });
     } catch (error) {
       if (
@@ -339,9 +343,9 @@ const TransactionsPage = ({ session, onSignOut }) => {
       ) {
         return;
       }
-      const rawMessage = error.message || "Unable to download statement.";
+      const rawMessage = error.message || s.unableToDownload;
       const friendlyMessage = rawMessage.includes("less than or equal to 500")
-        ? "As per RBI guidelines, digital statements include up to 500 transactions. Please shorten the date range and try again."
+        ? s.rbiGuidelines
         : rawMessage;
       setStatementStatus({
         type: "error",
@@ -357,20 +361,23 @@ const TransactionsPage = ({ session, onSignOut }) => {
       <div className="app-content">
         <div className="app-gradient">
           <SunHeader
-            subtitle="Complete transaction history"
+            subtitle={s.title}
             actionSlot={
-              <button type="button" className="ghost-btn" onClick={() => navigate(-1)}>
-                Back
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                <LanguageToggle />
+                <button type="button" className="ghost-btn" onClick={() => navigate(-1)}>
+                  {s.back}
+                </button>
+              </div>
             }
           />
           <main className="card-surface profile-surface">
             <section className="profile-card profile-card--span">
-              <h2>Accounts</h2>
+              <h2>{s.accounts}</h2>
               {accountsError && <div className="form-error">{accountsError}</div>}
               <div className="form-grid">
                 <label htmlFor="transactions-account">
-                  Select account
+                  {s.selectAccount}
                   <select
                     id="transactions-account"
                     value={selectedAccountId}
@@ -387,17 +394,17 @@ const TransactionsPage = ({ session, onSignOut }) => {
               </div>
               {selectedAccount && (
                 <p className="profile-hint">
-                  Current balance: {formatCurrency(selectedAccount.balance, selectedAccount.currency)}
+                  {s.currentBalance} {formatCurrency(selectedAccount.balance, selectedAccount.currency)}
                 </p>
               )}
             </section>
 
             <section className="profile-card profile-card--span">
-              <h2>Transactions</h2>
+              <h2>{s.transactions}</h2>
               {transactionsError && <div className="form-error">{transactionsError}</div>}
-              {transactionsLoading && <p className="profile-hint">Fetching transactions…</p>}
+              {transactionsLoading && <p className="profile-hint">{s.fetchingTransactions}</p>}
               {!transactionsLoading && transactions.length === 0 && (
-                <p className="profile-hint">No transactions found for this account.</p>
+                <p className="profile-hint">{s.noTransactionsFound}</p>
               )}
               {!transactionsLoading && transactions.length > 0 && (
                 <ul className="transactions-list">
@@ -407,7 +414,7 @@ const TransactionsPage = ({ session, onSignOut }) => {
                         <p className="profile-label">{txn.type}</p>
                         <p className="profile-value">{txn.description ?? "—"}</p>
                         <p className="profile-hint">
-                          {formatDateTime(txn.occurredAt)} · Reference: {txn.referenceId ?? "—"}
+                          {formatDateTime(txn.occurredAt)} · {s.reference} {txn.referenceId ?? "—"}
                         </p>
                       </div>
                       <div className="profile-amount">
@@ -420,10 +427,10 @@ const TransactionsPage = ({ session, onSignOut }) => {
               )}
 
               <div className="statement-controls">
-                <h3>Download account statement</h3>
+                <h3>{s.downloadStatement}</h3>
                 <div className="form-grid">
                   <label htmlFor="statement-from">
-                    From date
+                    {s.fromDate}
                     <input
                       id="statement-from"
                       type="date"
@@ -432,7 +439,7 @@ const TransactionsPage = ({ session, onSignOut }) => {
                     />
                   </label>
                   <label htmlFor="statement-to">
-                    To date
+                    {s.toDate}
                     <input
                       id="statement-to"
                       type="date"
@@ -447,7 +454,7 @@ const TransactionsPage = ({ session, onSignOut }) => {
                   onClick={handleDownloadStatement}
                   disabled={statementDownloading}
                 >
-                  {statementDownloading ? "Preparing…" : "Download statement"}
+                  {statementDownloading ? s.preparing : s.downloadStatementButton}
                 </button>
                 {statementStatus && (
                   <div

@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from secrets import token_urlsafe
 from typing import Optional
 import hashlib
+import logging
 
 from sqlalchemy.orm import Session
 
@@ -28,6 +29,8 @@ from ..repositories import (
 )
 from ..utils.security import verify_password
 from .voice_verification import VoiceVerificationService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -92,12 +95,30 @@ class AuthService:
             if user is None:
                 return AuthResult(success=False, reason="invalid_credentials")
 
+            # Define user_id_value early to avoid UnboundLocalError
+            user_id_value = user.id
+            customer_number_value = user.customer_number
+
             if login_mode != "voice":
                 if not verify_password(password, user.password_hash):
                     return AuthResult(success=False, reason="invalid_credentials")
                 device_identifier = None
                 fingerprint_hash = None
                 voice_sample = None
+                # Revoke all existing voice-secured bindings on password login
+                # Password login means user is not using voice authentication,
+                # so any previous voice-secured sessions should be invalidated
+                if not validate_only:
+                    all_bindings = list(list_device_bindings(session, user_id=user_id_value, include_revoked=True))
+                    for binding in all_bindings:
+                        # Revoke bindings that have voice signatures (voice-secured sessions)
+                        if binding.voice_signature_vector is not None and binding.trust_level != DeviceTrustLevel.REVOKED:
+                            mark_device_binding_trust(
+                                session, binding=binding, trust_level=DeviceTrustLevel.REVOKED
+                            )
+                            # Clear voice signature when revoking - user must re-enroll voice
+                            binding.voice_signature_hash = None
+                            binding.voice_signature_vector = None
             else:
                 if voice_sample is None:
                     return AuthResult(
@@ -120,9 +141,6 @@ class AuthService:
                 if device_label is None:
                     device_label = "Primary voice device"
 
-            user_id_value = user.id
-            customer_number_value = user.customer_number
-
             tz = ZoneInfo("Asia/Kolkata")
             now = datetime.now(tz)
             detail: dict = {"loginMode": login_mode}
@@ -132,10 +150,24 @@ class AuthService:
             voice_vector_bytes: Optional[bytes] = None
             voice_hash: Optional[str] = None
             if voice_sample:
+                logger.info(
+                    f"[Voice Verification] Computing voice embedding: user_id={user_id_value}, "
+                    f"voice_sample_size={len(voice_sample)} bytes"
+                )
                 voice_embedding = self._voice_verifier.compute_embedding(voice_sample)
                 if voice_embedding is not None:
                     voice_vector_bytes = self._voice_verifier.serialize_embedding(voice_embedding)
                     voice_hash = hashlib.sha256(voice_sample).hexdigest()
+                    logger.info(
+                        f"[Voice Verification] Voice embedding computed successfully: "
+                        f"user_id={user_id_value}, embedding_shape={voice_embedding.shape}, "
+                        f"voice_hash={voice_hash[:16]}..."
+                    )
+                else:
+                    logger.warning(
+                        f"[Voice Verification] Failed to compute voice embedding: "
+                        f"user_id={user_id_value}, voice_sample_size={len(voice_sample)} bytes"
+                    )
 
             bindings = list_device_bindings(session, user_id=user_id_value)
             binding = None
@@ -153,10 +185,26 @@ class AuthService:
                         binding.last_verified_at = binding.last_verified_at.replace(tzinfo=tz)
                     if binding.revoked_at is not None and binding.revoked_at.tzinfo is None:
                         binding.revoked_at = binding.revoked_at.replace(tzinfo=tz)
-                    if binding.trust_level in (
-                        DeviceTrustLevel.SUSPENDED,
-                        DeviceTrustLevel.REVOKED,
-                    ):
+                    # Handle revoked bindings - allow re-binding if voice sample is provided
+                    if binding.trust_level == DeviceTrustLevel.REVOKED:
+                        # If voice sample is provided and valid, allow re-binding
+                        if voice_embedding is not None and voice_vector_bytes is not None and voice_hash is not None:
+                            # User is attempting to re-bind with new voice
+                            # This is allowed - we'll update the binding below
+                            pass
+                        else:
+                            # No valid voice sample - require re-binding through device binding endpoint
+                            return AuthResult(
+                                success=False,
+                                reason="device_verification_required",
+                                detail={
+                                    "bindingId": binding_id,
+                                    "trustLevel": binding.trust_level.value,
+                                    "message": "Device binding has been revoked. Please re-register your voice.",
+                                    "rebindRequired": True,
+                                },
+                            )
+                    elif binding.trust_level == DeviceTrustLevel.SUSPENDED:
                         return AuthResult(
                             success=False,
                             reason="device_verification_required",
@@ -187,16 +235,90 @@ class AuthService:
                         )
 
                     stored_vector = None
-                    if binding.voice_signature_vector:
-                        stored_vector = self._voice_verifier.deserialize_embedding(
-                            binding.voice_signature_vector
-                        )
+                    is_first_time_enrollment = False
+                    # Check if binding has a valid voice signature vector
+                    if binding.voice_signature_vector and len(binding.voice_signature_vector) > 0:
+                        try:
+                            stored_vector = self._voice_verifier.deserialize_embedding(
+                                binding.voice_signature_vector
+                            )
+                            # Verify the deserialized vector is valid (has expected dimensions)
+                            # Resemblyzer embeddings are typically 256-dimensional
+                            if stored_vector is not None:
+                                if len(stored_vector) == 0:
+                                    logger.warning(
+                                        f"[Voice Verification] Stored voice signature is empty, "
+                                        f"treating as first-time enrollment for user_id={user_id_value}"
+                                    )
+                                    stored_vector = None
+                                    is_first_time_enrollment = True
+                                elif len(stored_vector) < 100:  # Sanity check - embeddings should be ~256 dims
+                                    logger.warning(
+                                        f"[Voice Verification] Stored voice signature has invalid dimensions "
+                                        f"({len(stored_vector)}), treating as first-time enrollment for user_id={user_id_value}"
+                                    )
+                                    stored_vector = None
+                                    is_first_time_enrollment = True
+                        except Exception as e:
+                            logger.warning(
+                                f"[Voice Verification] Failed to deserialize stored voice signature: {e}, "
+                                f"treating as first-time enrollment for user_id={user_id_value}"
+                            )
+                            stored_vector = None
+                            is_first_time_enrollment = True
+                    else:
+                        is_first_time_enrollment = True
 
                     if stored_vector is not None:
-                        matches, score = self._voice_verifier.matches(stored_vector, voice_embedding)
+                        # Existing voice signature found - perform verification
+                        logger.info(
+                            f"[Voice Verification] Starting voice VERIFICATION (comparing against stored signature) "
+                            f"for user_id={user_id_value}, customer_number={customer_number_value}, "
+                            f"binding_id={binding_id}, device_identifier={device_identifier}"
+                        )
+                        try:
+                            from .ai_voice_verification import AIVoiceVerificationService
+                            ai_verifier = AIVoiceVerificationService(self._voice_verifier)
+                            
+                            # Prepare user context for AI analysis
+                            user_context = {
+                                "user_id": str(user_id_value),
+                                "customer_number": customer_number_value,
+                                "device_identifier": device_identifier,
+                                "device_trust_level": binding.trust_level.value,
+                                "is_new_device": False,
+                                "binding_id": binding_id,
+                            }
+                            
+                            # Use AI-enhanced verification
+                            matches, score = ai_verifier.matches(
+                                stored_vector,
+                                voice_embedding,
+                                use_ai=True,
+                                user_context=user_context,
+                            )
+                            logger.info(
+                                f"[Voice Verification] AI verification completed: matches={matches}, "
+                                f"score={score:.4f}, user_id={user_id_value}"
+                            )
+                        except (ImportError, Exception) as e:
+                            # Fallback to basic verification if AI service unavailable
+                            logger.warning(
+                                f"[Voice Verification] AI verification unavailable, using basic verification: {e}"
+                            )
+                            matches, score = self._voice_verifier.matches(stored_vector, voice_embedding)
+                            logger.info(
+                                f"[Voice Verification] Basic verification completed: matches={matches}, "
+                                f"score={score:.4f}, user_id={user_id_value}"
+                            )
+                        
                         score_value = float(score)
                         detail["similarityScore"] = round(score_value, 4)
                         if not matches:
+                            logger.warning(
+                                f"[Voice Verification] Voice mismatch: score={score_value:.4f}, "
+                                f"user_id={user_id_value}, binding_id={binding_id}"
+                            )
                             return AuthResult(
                                 success=False,
                                 reason="voice_mismatch",
@@ -208,20 +330,49 @@ class AuthService:
                                     "rebindSuggested": True,
                                 },
                             )
+                        else:
+                            logger.info(
+                                f"[Voice Verification] Voice verification successful: score={score_value:.4f}, "
+                                f"user_id={user_id_value}, binding_id={binding_id}"
+                            )
                     else:
+                        # First-time enrollment - no stored voice signature to compare against
+                        logger.info(
+                            f"[Voice Verification] First-time voice ENROLLMENT (no stored signature to compare) "
+                            f"for user_id={user_id_value}, customer_number={customer_number_value}, "
+                            f"binding_id={binding_id}, device_identifier={device_identifier}"
+                        )
                         detail["enrolled"] = True
 
                     if not validate_only:
+                        # Revoke all other bindings for this user to ensure only one active binding exists
+                        # This maintains the rule: one login = one session = one trusted device
+                        all_bindings = list(list_device_bindings(session, user_id=user_id_value, include_revoked=True))
+                        for other_binding in all_bindings:
+                            if other_binding.id != binding.id and other_binding.trust_level != DeviceTrustLevel.REVOKED:
+                                mark_device_binding_trust(
+                                    session, binding=other_binding, trust_level=DeviceTrustLevel.REVOKED
+                                )
+                                # Clear voice signature when revoking - user must re-enroll voice
+                                other_binding.voice_signature_hash = None
+                                other_binding.voice_signature_vector = None
+                        
+                        # Update voice signature (important for re-binding after revocation)
                         binding.voice_signature_hash = voice_hash
                         binding.voice_signature_vector = voice_vector_bytes
                         binding.last_verified_at = now
                         detail.pop("voiceEnrollmentRequired", None)
                         detail.pop("voiceReverificationRequired", None)
                         detail.pop("voicePhrase", None)
-                        binding.revoked_at = None
-                        mark_device_binding_trust(
-                            session, binding=binding, trust_level=DeviceTrustLevel.TRUSTED
-                        )
+                        # Clear revoked status if binding was previously revoked (re-binding)
+                        if binding.revoked_at is not None:
+                            binding.revoked_at = None
+                            detail["rebound"] = True
+                        # Ensure trust level is TRUSTED (important for re-binding)
+                        if binding.trust_level != DeviceTrustLevel.TRUSTED:
+                            mark_device_binding_trust(
+                                session, binding=binding, trust_level=DeviceTrustLevel.TRUSTED
+                            )
                 else:
                     if voice_embedding is None or voice_vector_bytes is None or voice_hash is None:
                         return AuthResult(
@@ -234,12 +385,22 @@ class AuthService:
                         )
 
                     if validate_only:
-                        detail = {
+                        detail.update({
                             "loginMode": login_mode,
                             "firstVoiceEnrollment": True,
                             "deviceBindingPreview": True,
-                        }
+                            "voicePhrase": VOICE_ENROLLMENT_PHRASE,
+                        })
                     else:
+                        # Revoke all other bindings for this user to ensure only one active binding exists
+                        # This maintains the rule: one login = one session = one trusted device
+                        all_bindings = list(list_device_bindings(session, user_id=user_id_value, include_revoked=True))
+                        for other_binding in all_bindings:
+                            if other_binding.trust_level != DeviceTrustLevel.REVOKED:
+                                mark_device_binding_trust(
+                                    session, binding=other_binding, trust_level=DeviceTrustLevel.REVOKED
+                                )
+                        
                         new_binding = create_device_binding(
                             session,
                             user_id=user_id_value,
@@ -257,13 +418,15 @@ class AuthService:
                         binding.last_verified_at = now
                         session.flush()
                         binding_id = str(binding.id)
-                        detail = {
+                        detail.update({
                             "deviceBindingId": binding_id,
                             "enrolled": True,
                             "loginMode": login_mode,
                             "firstVoiceEnrollment": True,
-                        }
+                        })
             else:
+                # device_identifier is None - this should not happen for voice mode due to defaults,
+                # but handle it gracefully
                 if login_mode == "voice":
                     if bindings:
                         return AuthResult(
@@ -274,6 +437,16 @@ class AuthService:
                                 "expectedBindings": len(bindings),
                             },
                         )
+                    # For first-time voice login without device_identifier, set defaults
+                    if device_identifier is None:
+                        device_identifier = f"default-voice-{user_id_value}"
+                    if fingerprint_hash is None:
+                        fingerprint_hash = device_identifier
+                    if platform is None:
+                        platform = "web"
+                    if device_label is None:
+                        device_label = "Primary voice device"
+                    
                     detail["deviceBindingRequired"] = True
                     detail["voicePhrase"] = VOICE_ENROLLMENT_PHRASE
                     if voice_embedding is None or voice_vector_bytes is None or voice_hash is None:
@@ -286,6 +459,42 @@ class AuthService:
                                 "message": "Voice sample was too short or unclear. Please record again.",
                             },
                         )
+                    
+                    # If not validate_only, create binding even when device_identifier was originally None
+                    if not validate_only:
+                        # Revoke all other bindings for this user to ensure only one active binding exists
+                        # This maintains the rule: one login = one session = one trusted device
+                        all_bindings = list(list_device_bindings(session, user_id=user_id_value, include_revoked=True))
+                        for other_binding in all_bindings:
+                            if other_binding.trust_level != DeviceTrustLevel.REVOKED:
+                                mark_device_binding_trust(
+                                    session, binding=other_binding, trust_level=DeviceTrustLevel.REVOKED
+                                )
+                        
+                        new_binding = create_device_binding(
+                            session,
+                            user_id=user_id_value,
+                            device_identifier=device_identifier,
+                            fingerprint_hash=fingerprint_hash or device_identifier,
+                            registration_method=registration_method or "otp+voice",
+                            platform=platform,
+                            device_label=device_label,
+                            voice_signature_hash=voice_hash,
+                            voice_signature_vector=voice_vector_bytes,
+                        )
+                        session.flush()
+                        session.refresh(new_binding)
+                        binding = new_binding
+                        binding.last_verified_at = now
+                        session.flush()
+                        binding_id = str(binding.id)
+                        detail.update({
+                            "deviceBindingId": binding_id,
+                            "enrolled": True,
+                            "loginMode": login_mode,
+                            "firstVoiceEnrollment": True,
+                        })
+                        detail.pop("deviceBindingRequired", None)
 
             if validate_only:
                 return AuthResult(
