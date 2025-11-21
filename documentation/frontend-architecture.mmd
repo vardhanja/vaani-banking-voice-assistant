@@ -1,0 +1,63 @@
+%% Mermaid diagram for the frontend module
+flowchart TD
+  user["Customer UI<br/>Voice + touch inputs"]
+
+  subgraph "React Shell (Vite)"
+    main["main.jsx<br/>BrowserRouter mount"]
+    app["App.jsx<br/>Session state + guards"]
+    routes["react-router Routes<br/>/ /profile /chat /..."]
+  end
+
+  subgraph "Page Views"
+    login["Login & DeviceBinding<br/>Voice/password auth"]
+    profile["Profile Dashboard<br/>Accounts · transfers · reminders"]
+    chat["Chat & UPI Workspace<br/>Voice assistant + QR upload"]
+    misc["Transactions / Reminders / Beneficiaries<br/>Read-only pages"]
+  end
+
+  subgraph "Shared UI + Hooks"
+    components["Components<br/>SunHeader · LanguageDropdown · Modals"]
+    voiceHooks["Voice Hooks<br/>useSpeechRecognition · useTextToSpeech"]
+    chatHooks["Chat Hooks<br/>useChatMessages · useChatHandler · useVoiceMode"]
+    configUtils["Config + Utils<br/>voiceConfig.js · preferences.js"]
+  end
+
+  subgraph "Client Services"
+    chatService["services/chatService.js<br/>LLM orchestration"]
+    restClient["api/client.js<br/>Auth · accounts · UPI REST"]
+    aiClient["api/aiClient.js<br/>/api/chat · /api/tts"]
+  end
+
+  subgraph "Backends"
+    backend["FastAPI backend (8000)<br/>Auth · accounts · UPI APIs"]
+    aiBackend["AI FastAPI (8001)<br/>Hybrid supervisor + RAG"]
+  end
+
+  user --> main --> app --> routes
+  routes --> login
+  routes --> profile
+  routes --> chat
+  routes --> misc
+
+  login --> components
+  profile --> components
+  chat --> components
+  misc --> components
+
+  login --> restClient
+  profile --> restClient
+  misc --> restClient
+  profile --> chatService
+  chat --> chatHooks
+  chat --> voiceHooks
+  chat --> chatService
+  chatHooks --> chatService
+  chatHooks --> components
+
+  chatService --> aiClient
+  chatService --> restClient
+  restClient --> backend
+  aiClient --> aiBackend
+
+  voiceHooks --> configUtils
+  components --> configUtils
