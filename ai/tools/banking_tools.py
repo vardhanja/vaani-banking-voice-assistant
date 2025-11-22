@@ -3,6 +3,7 @@ Simple banking tools for AI agent
 Uses existing backend database functions
 """
 import sys
+import time
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
@@ -18,6 +19,10 @@ from pydantic import BaseModel, Field
 from db.repositories import accounts as account_repo
 from db.repositories import transactions as transaction_repo
 from utils.db_helper import get_db
+
+# Import demo logging
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.demo_logging import demo_logger
 
 
 # Tool input schemas
@@ -106,24 +111,47 @@ def get_account_balance(account_number: str) -> Dict[str, Any]:
     Returns:
         Dictionary with balance information
     """
+    start_time = time.time()
     try:
         with get_db() as db:
             account = account_repo.get_account_by_number(db, account_number)
             
             if not account:
-                return {
+                result = {
                     "success": False,
                     "error": "Account not found"
                 }
+                demo_logger.tool_execution(
+                    tool_name="get_account_balance",
+                    success=False,
+                    duration_ms=(time.time() - start_time) * 1000,
+                    error="Account not found"
+                )
+                return result
             
-            return {
+            result = {
                 "success": True,
                 "account_number": account.account_number,
                 "account_type": account.account_type,
                 "balance": float(account.balance),
                 "currency": "INR"
             }
+            
+            demo_logger.tool_execution(
+                tool_name="get_account_balance",
+                success=True,
+                duration_ms=(time.time() - start_time) * 1000,
+                result=f"Balance: ₹{result['balance']:.2f} ({account.account_number})"
+            )
+            
+            return result
     except Exception as e:
+        demo_logger.tool_execution(
+            tool_name="get_account_balance",
+            success=False,
+            duration_ms=(time.time() - start_time) * 1000,
+            error=str(e)
+        )
         return {
             "success": False,
             "error": str(e)
@@ -144,16 +172,24 @@ def get_transaction_history(account_number: str, days: int = 30, limit: int = 10
     Returns:
         Dictionary with transaction list
     """
+    start_time = time.time()
     try:
         with get_db() as db:
             # Get account first
             account = account_repo.get_account_by_number(db, account_number)
             
             if not account:
-                return {
+                result = {
                     "success": False,
                     "error": "Account not found"
                 }
+                demo_logger.tool_execution(
+                    tool_name="get_transaction_history",
+                    success=False,
+                    duration_ms=(time.time() - start_time) * 1000,
+                    error="Account not found"
+                )
+                return result
             
             # Calculate date range
             start_date = datetime.now() - timedelta(days=days)
@@ -178,13 +214,28 @@ def get_transaction_history(account_number: str, days: int = 30, limit: int = 10
                     "counterparty": txn.counterparty_name or ""
                 })
             
-            return {
+            result = {
                 "success": True,
                 "account_number": account_number,
                 "transactions": transactions_list,
                 "count": len(transactions_list)
             }
+            
+            demo_logger.tool_execution(
+                tool_name="get_transaction_history",
+                success=True,
+                duration_ms=(time.time() - start_time) * 1000,
+                result=f"Found {len(transactions_list)} transactions"
+            )
+            
+            return result
     except Exception as e:
+        demo_logger.tool_execution(
+            tool_name="get_transaction_history",
+            success=False,
+            duration_ms=(time.time() - start_time) * 1000,
+            error=str(e)
+        )
         return {
             "success": False,
             "error": str(e)

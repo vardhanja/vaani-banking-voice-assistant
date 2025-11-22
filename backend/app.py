@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import logging
 import sys
+import time
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.routes import router as api_router
+from .utils.demo_logging import demo_logger
 
 
 def setup_logging():
@@ -60,6 +62,35 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    
+    # Add demo logging middleware
+    @app.middleware("http")
+    async def demo_logging_middleware(request: Request, call_next):
+        """Middleware to log API requests/responses for demo"""
+        start_time = time.time()
+        
+        # Log request
+        demo_logger.api_request(
+            method=request.method,
+            path=request.url.path,
+            query_params=str(request.query_params) if request.query_params else None,
+            client_ip=request.client.host if request.client else None,
+        )
+        
+        # Process request
+        response = await call_next(request)
+        
+        # Calculate duration
+        duration_ms = (time.time() - start_time) * 1000
+        
+        # Log response
+        demo_logger.api_response(
+            status_code=response.status_code,
+            duration_ms=duration_ms,
+            content_type=response.headers.get("content-type"),
+        )
+        
+        return response
 
     app.include_router(api_router)
     

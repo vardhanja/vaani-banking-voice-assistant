@@ -12,6 +12,7 @@ from agents.rag_agent import rag_agent
 from agents.greeting_agent import greeting_agent
 from agents.upi_agent import upi_agent
 from utils import logger
+from utils.demo_logging import demo_logger
 
 from .router import IntentRouter
 from .state import ConversationState
@@ -55,6 +56,16 @@ class HybridSupervisor:
 
         intent = await self.router.assign_intent(context)
         agent_key = self.router.resolve_route(intent)
+        
+        # Demo logging: Agent routing decision
+        demo_logger.agent_decision(
+            agent_name=agent_key,
+            intent=intent,
+            confidence=getattr(intent, 'confidence', None) if hasattr(intent, 'confidence') else None,
+            language=context.language,
+            upi_mode=context.upi_mode,
+        )
+        
         await self._invoke_specialist(agent_key, context)
 
         return self._build_response(context)

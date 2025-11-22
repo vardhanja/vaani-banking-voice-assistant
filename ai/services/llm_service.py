@@ -4,8 +4,10 @@ Provides a single interface to switch between Ollama (local) and OpenAI (cloud)
 """
 from typing import List, Dict, Optional, AsyncGenerator
 from enum import Enum
+import time
 from config import settings
 from utils import logger
+from utils.demo_logging import demo_logger
 from .ollama_service import OllamaService
 from .openai_service import OpenAIService
 
@@ -66,21 +68,43 @@ class LLMService:
         Returns:
             Generated text response
         """
+        start_time = time.time()
+        
         # Log which provider is being used
         provider_name = "🤖 Ollama (Local)" if self.provider == LLMProvider.OLLAMA else "🌐 OpenAI GPT (Cloud)"
+        model_name = self.service.model if hasattr(self.service, 'model') else "unknown"
+        
+        # Calculate prompt length
+        prompt_length = sum(len(msg.get('content', '')) for msg in messages)
+        
         logger.info(
             "llm_request",
             provider=provider_name,
-            model=self.service.model if hasattr(self.service, 'model') else "unknown",
+            model=model_name,
             message_count=len(messages)
         )
         
-        return await self.service.chat(
+        # Call LLM
+        response = await self.service.chat(
             messages=messages,
             use_fast_model=use_fast_model,
             temperature=temperature,
             max_tokens=max_tokens,
         )
+        
+        # Calculate metrics
+        duration_ms = (time.time() - start_time) * 1000
+        response_length = len(response)
+        
+        # Demo logging: LLM call
+        demo_logger.llm_call(
+            model=model_name,
+            prompt_length=prompt_length,
+            response_length=response_length,
+            duration_ms=duration_ms,
+        )
+        
+        return response
     
     async def chat_stream(
         self,

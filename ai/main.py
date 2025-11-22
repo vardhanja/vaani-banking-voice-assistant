@@ -24,6 +24,7 @@ from config import settings
 from services import get_llm_service, get_azure_tts_service
 from agents.agent_graph import process_message
 from utils import logger
+from utils.demo_logging import demo_logger
 
 
 # Pydantic models for API
@@ -181,6 +182,23 @@ async def chat(request: ChatRequest):
     4. Returns AI-generated response
     """
     try:
+        # Demo logging: User message received
+        demo_logger.chat_request(
+            user_id=request.user_id,
+            session_id=request.session_id,
+            message=request.message,
+            language=request.language,
+            voice_mode=request.voice_mode,
+            upi_mode=request.upi_mode,
+        )
+        
+        # State transition: User speaking -> Processing
+        demo_logger.state_transition(
+            from_state="USER SPEAKING",
+            to_state="PROCESSING",
+            reason="Message received, routing to agent"
+        )
+        
         logger.info(
             "chat_request",
             user_id=request.user_id,
@@ -209,10 +227,25 @@ async def chat(request: ChatRequest):
             upi_mode=request.upi_mode  # Pass UPI mode from frontend
         )
         
+        # Demo logging: AI response
+        demo_logger.ai_response(
+            response=result.get("response", ""),
+            agent=result.get("intent", "unknown"),
+            language=request.language,
+        )
+        
+        # State transition: Processing -> AI speaking
+        demo_logger.state_transition(
+            from_state="PROCESSING",
+            to_state="AI SPEAKING",
+            reason="Response generated, sending to user"
+        )
+        
         return ChatResponse(**result)
         
     except Exception as e:
         logger.error("chat_endpoint_error", error=str(e))
+        demo_logger.error("Chat endpoint error", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 

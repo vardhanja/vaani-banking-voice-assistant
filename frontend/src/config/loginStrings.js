@@ -71,6 +71,112 @@ export const LOGIN_STRINGS = {
       hideOtp: "Hide",
       editDetails: "Edit details",
       needHelp: "Need help signing in?",
+      sunHeaderSubtitle: "Voice-first banking, made human.",
+    },
+    // Hero section
+    hero: {
+      titleEnglish: "Voice-First Banking",
+      titleHindi: "आवाज़-पहली बैंकिंग",
+      languageTagEnglish: "English",
+      languageTagHindi: "हिंदी",
+      languageTagMore: "+ More languages",
+      subtitleText: "Currently available in English & Hindi",
+      subtitleHint: "Extensible to any language worldwide",
+      tagline: "Secure, smart, and seamless banking for Bharat",
+    },
+    // Vaani AI Assistant section
+    vaani: {
+      badge: "What's New",
+      title: "Experience Banking with Vaani AI Assistant",
+      description: "Your intelligent voice-first banking companion. Ask questions, get instant answers about loans, investments, and banking services in English or Hindi.",
+      feature1: "Voice-first interaction for seamless banking",
+      feature2: "AI-powered intelligent responses",
+      feature3: "Multi-language support (English & Hindi)",
+      feature4: "Natural conversation interface",
+    },
+    // Loan products section
+    loans: {
+      title: "Our Loan Products",
+      subtitle: "Choose from a wide range of loan options tailored to your needs",
+      homeLoan: {
+        title: "Home Loan",
+        rate: "8.35% - 9.50% p.a.",
+        description: "Up to ₹5 crores | Up to 30 years",
+      },
+      autoLoan: {
+        title: "Auto Loan",
+        rate: "8.75% - 12% p.a.",
+        description: "Up to ₹50 lakhs | Up to 7 years",
+      },
+      personalLoan: {
+        title: "Personal Loan",
+        rate: "10.5% - 24% p.a.",
+        description: "Up to ₹40 lakhs | Up to 5 years",
+      },
+      educationLoan: {
+        title: "Education Loan",
+        rate: "8.5% - 11.5% p.a.",
+        description: "Up to ₹1 crore | Up to 15 years",
+      },
+      businessLoan: {
+        title: "Business Loan",
+        rate: "11% - 18% p.a.",
+        description: "Up to ₹50 lakhs | MSME/SME",
+      },
+      goldLoan: {
+        title: "Gold Loan",
+        rate: "10% - 15% p.a.",
+        description: "Up to ₹25 lakhs | Quick approval",
+      },
+      loanAgainstProperty: {
+        title: "Loan Against Property",
+        rate: "9.5% - 12.5% p.a.",
+        description: "Up to ₹5 crores | Up to 15 years",
+      },
+    },
+    // Investment schemes section
+    investments: {
+      title: "Investment Schemes",
+      subtitle: "Grow your wealth with our diverse investment options",
+      ppf: {
+        title: "PPF",
+        rate: "7.1% p.a.",
+        description: "₹500 - ₹1.5L/year | 15 years | Tax-free",
+      },
+      nps: {
+        title: "NPS",
+        rate: "8-12% p.a.",
+        description: "Market-linked | Retirement scheme | Extra ₹50K tax deduction",
+      },
+      ssy: {
+        title: "SSY",
+        rate: "8.2% p.a.",
+        description: "₹250 - ₹1.5L/year | Girl child scheme | 21 years",
+      },
+      elss: {
+        title: "ELSS",
+        rate: "Market-linked",
+        description: "₹500+ | 3-year lock-in | Tax saving mutual fund",
+      },
+      fixedDeposit: {
+        title: "Fixed Deposit",
+        rate: "6-8% p.a.",
+        description: "₹1000+ | 7 days-10 years | Safe investment",
+      },
+      recurringDeposit: {
+        title: "Recurring Deposit",
+        rate: "6-7.5% p.a.",
+        description: "₹100/month | Regular savings",
+      },
+      nsc: {
+        title: "NSC",
+        rate: "7-9% p.a.",
+        description: "₹1000+ | 5 years | Government backed",
+      },
+    },
+    // Footer
+    footer: {
+      text: "© {year} Sun National Bank · RBI compliant · Made for Bharat",
     },
     // Errors
     errors: {
@@ -145,6 +251,112 @@ export const LOGIN_STRINGS = {
       hideOtp: "छुपाएँ",
       editDetails: "विवरण संपादित करें",
       needHelp: "साइन इन करने में मदद चाहिए?",
+      sunHeaderSubtitle: "आवाज़-पहली बैंकिंग, मानवीय बनाई गई।",
+    },
+    // Hero section
+    hero: {
+      titleEnglish: "Voice-First Banking",
+      titleHindi: "आवाज़-पहली बैंकिंग",
+      languageTagEnglish: "English",
+      languageTagHindi: "हिंदी",
+      languageTagMore: "+ अधिक भाषाएँ",
+      subtitleText: "वर्तमान में अंग्रेज़ी और हिंदी में उपलब्ध",
+      subtitleHint: "दुनिया भर की किसी भी भाषा में विस्तार योग्य",
+      tagline: "भारत के लिए सुरक्षित, स्मार्ट और निर्बाध बैंकिंग",
+    },
+    // Vaani AI Assistant section
+    vaani: {
+      badge: "नया क्या है",
+      title: "वाणी AI असिस्टेंट के साथ बैंकिंग का अनुभव करें",
+      description: "आपका बुद्धिमान आवाज़-पहली बैंकिंग साथी। अंग्रेज़ी या हिंदी में ऋण, निवेश और बैंकिंग सेवाओं के बारे में प्रश्न पूछें, तत्काल उत्तर प्राप्त करें।",
+      feature1: "निर्बाध बैंकिंग के लिए आवाज़-पहली बातचीत",
+      feature2: "AI-संचालित बुद्धिमान प्रतिक्रियाएँ",
+      feature3: "बहु-भाषा समर्थन (अंग्रेज़ी और हिंदी)",
+      feature4: "प्राकृतिक वार्तालाप इंटरफ़ेस",
+    },
+    // Loan products section
+    loans: {
+      title: "हमारे ऋण उत्पाद",
+      subtitle: "अपनी आवश्यकताओं के अनुरूप ऋण विकल्पों की विस्तृत श्रृंखला में से चुनें",
+      homeLoan: {
+        title: "होम लोन",
+        rate: "8.35% - 9.50% प्रति वर्ष",
+        description: "₹5 करोड़ तक | 30 वर्ष तक",
+      },
+      autoLoan: {
+        title: "ऑटो लोन",
+        rate: "8.75% - 12% प्रति वर्ष",
+        description: "₹50 लाख तक | 7 वर्ष तक",
+      },
+      personalLoan: {
+        title: "पर्सनल लोन",
+        rate: "10.5% - 24% प्रति वर्ष",
+        description: "₹40 लाख तक | 5 वर्ष तक",
+      },
+      educationLoan: {
+        title: "एजुकेशन लोन",
+        rate: "8.5% - 11.5% प्रति वर्ष",
+        description: "₹1 करोड़ तक | 15 वर्ष तक",
+      },
+      businessLoan: {
+        title: "बिज़नेस लोन",
+        rate: "11% - 18% प्रति वर्ष",
+        description: "₹50 लाख तक | MSME/SME",
+      },
+      goldLoan: {
+        title: "गोल्ड लोन",
+        rate: "10% - 15% प्रति वर्ष",
+        description: "₹25 लाख तक | त्वरित अनुमोदन",
+      },
+      loanAgainstProperty: {
+        title: "संपत्ति के खिलाफ ऋण",
+        rate: "9.5% - 12.5% प्रति वर्ष",
+        description: "₹5 करोड़ तक | 15 वर्ष तक",
+      },
+    },
+    // Investment schemes section
+    investments: {
+      title: "निवेश योजनाएँ",
+      subtitle: "हमारे विविध निवेश विकल्पों के साथ अपनी संपत्ति बढ़ाएँ",
+      ppf: {
+        title: "PPF",
+        rate: "7.1% प्रति वर्ष",
+        description: "₹500 - ₹1.5L/वर्ष | 15 वर्ष | कर-मुक्त",
+      },
+      nps: {
+        title: "NPS",
+        rate: "8-12% प्रति वर्ष",
+        description: "बाज़ार-लिंक्ड | सेवानिवृत्ति योजना | अतिरिक्त ₹50K कर कटौती",
+      },
+      ssy: {
+        title: "SSY",
+        rate: "8.2% प्रति वर्ष",
+        description: "₹250 - ₹1.5L/वर्ष | बालिका योजना | 21 वर्ष",
+      },
+      elss: {
+        title: "ELSS",
+        rate: "बाज़ार-लिंक्ड",
+        description: "₹500+ | 3 वर्ष लॉक-इन | कर बचत म्यूचुअल फंड",
+      },
+      fixedDeposit: {
+        title: "फिक्स्ड डिपॉज़िट",
+        rate: "6-8% प्रति वर्ष",
+        description: "₹1000+ | 7 दिन-10 वर्ष | सुरक्षित निवेश",
+      },
+      recurringDeposit: {
+        title: "रिकरिंग डिपॉज़िट",
+        rate: "6-7.5% प्रति वर्ष",
+        description: "₹100/महीना | नियमित बचत",
+      },
+      nsc: {
+        title: "NSC",
+        rate: "7-9% प्रति वर्ष",
+        description: "₹1000+ | 5 वर्ष | सरकारी समर्थित",
+      },
+    },
+    // Footer
+    footer: {
+      text: "© {year} सन नेशनल बैंक · RBI अनुपालन · भारत के लिए बनाया गया",
     },
     // Errors
     errors: {

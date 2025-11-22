@@ -16,6 +16,7 @@ from langchain_core.embeddings import Embeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from utils import logger
+from utils.demo_logging import demo_logger
 from services.semantic_chunker import SemanticChunker
 
 
@@ -277,6 +278,15 @@ class RAGService:
             return []
         
         try:
+            # Demo logging: RAG retrieval start
+            demo_logger.rag_retrieval(
+                query=query,
+                collection=self.collection_name,
+                k=k,
+                filter=filter,
+                language=getattr(self, '_language', 'en-IN'),
+            )
+            
             if filter:
                 # Log filter details for debugging
                 logger.info(
@@ -320,11 +330,15 @@ class RAGService:
             else:
                 results = self.vectorstore.similarity_search(query, k=k)
             
+            # Demo logging: RAG results
+            demo_logger.rag_results(results)
+            
             logger.info("retrieval_completed", query_length=len(query), results=len(results))
             return results
             
         except Exception as e:
             logger.error("retrieval_error", error=str(e), filter=filter)
+            demo_logger.error("RAG retrieval failed", error=str(e), filter=filter)
             return []
     
     def retrieve_with_scores(
@@ -347,13 +361,28 @@ class RAGService:
             return []
         
         try:
+            # Demo logging: RAG retrieval with scores
+            demo_logger.rag_retrieval(
+                query=query,
+                collection=self.collection_name,
+                k=k,
+                with_scores=True,
+            )
+            
             results = self.vectorstore.similarity_search_with_score(query, k=k)
+            
+            # Extract documents and scores for demo logging
+            documents = [doc for doc, score in results]
+            scores = [score for doc, score in results]
+            demo_logger.rag_results(documents, scores=scores)
+            
             logger.info("retrieval_with_scores_completed", 
                        query_length=len(query),
                        results=len(results))
             return results
         except Exception as e:
             logger.error("retrieval_error", error=str(e))
+            demo_logger.error("RAG retrieval with scores failed", error=str(e))
             return []
     
     def _normalize_query(self, query: str) -> str:
