@@ -1,0 +1,56 @@
+%% Mermaid diagram for the AI module (kept simple and parse-safe)
+flowchart TD
+  client["Frontend Client"] --> beChat["Backend /api/chat"]
+  beChat --> entry["agent_graph.process_message"]
+
+  subgraph "Orchestrator (ai/orchestrator)"
+    supervisor["HybridSupervisor"]
+    state["ConversationState"]
+    router["IntentRouter"]
+  end
+
+  subgraph "Agents (ai/agents)"
+    banking["Banking Agent"]
+    upi["UPI Agent"]
+    rag["RAG Supervisor"]
+    greet["Greeting Agent"]
+    feedback["Feedback Agent"]
+  end
+
+  subgraph "RAG Specialists (ai/agents/rag_agents)"
+    loan["Loan Specialist"]
+    invest["Investment Specialist"]
+    support["Customer Support Specialist"]
+  end
+
+  subgraph "Services (ai/services)"
+    llm["LLMService (Ollama/OpenAI)"]
+    ragSvc["RAGService (Chroma + embeddings)"]
+    tools["Banking/UPI Tools"]
+  end
+
+  entry --> supervisor
+  supervisor --> state
+  supervisor --> router
+
+  router -->|banking| banking
+  router -->|upi| upi
+  router -->|faq/product| rag
+  router -->|greeting| greet
+  router -->|feedback| feedback
+
+  rag --> loan
+  rag --> invest
+  rag --> support
+
+  banking --> tools
+  upi --> tools
+  banking --> llm
+  upi --> llm
+  rag --> llm
+  loan --> ragSvc
+  invest --> ragSvc
+  support --> ragSvc
+
+  supervisor --> beChat
+  beChat --> client

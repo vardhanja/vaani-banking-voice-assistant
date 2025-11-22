@@ -18,3 +18,5 @@ ai/.env
 # Log files
 *.log
 ai/logs/
+
+.pytest_cache/
