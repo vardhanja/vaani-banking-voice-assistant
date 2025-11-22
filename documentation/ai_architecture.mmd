@@ -1,0 +1,69 @@
+%% Mermaid diagram for the AI module (kept simple and parse-safe)
+flowchart TD
+  client["Frontend Client"] --> beChat["Backend /api/chat"]
+  beChat --> entry["agent_graph.process_message"]
+
+  subgraph "Orchestrator (ai/orchestrator)"
+    supervisor["HybridSupervisor"]
+    state["ConversationState"]
+    router["IntentRouter"]
+  end
+
+  subgraph "Agents (ai/agents)"
+    banking["Banking Agent"]
+    upi["UPI Agent"]
+    rag["RAG Supervisor"]
+    greet["Greeting Agent"]
+    feedback["Feedback Agent"]
+  end
+
+  subgraph "RAG Specialists (ai/agents/rag_agents)"
+    loan["Loan Agent<br/>(7 loan types)"]
+    invest["Investment Agent<br/>(7 schemes)"]
+    support["Customer Support Agent<br/>(contact info)"]
+  end
+
+  subgraph "Services (ai/services)"
+    llm["LLMService<br/>(Ollama: qwen2.5:7b, llama3.2:3b)"]
+    ragSvc["RAGService<br/>(ChromaDB + HuggingFace embeddings)"]
+    tools["Banking/UPI Tools"]
+  end
+
+  subgraph "Vector Databases (ai/chroma_db)"
+    loanEn["loan_products (English)"]
+    loanHi["loan_products_hindi (Hindi)"]
+    investEn["investment_schemes (English)"]
+    investHi["investment_schemes_hindi (Hindi)"]
+  end
+
+  entry --> supervisor
+  supervisor --> state
+  supervisor --> router
+
+  router -->|banking| banking
+  router -->|upi| upi
+  router -->|faq/product| rag
+  router -->|greeting| greet
+  router -->|feedback| feedback
+
+  rag -->|loan queries| loan
+  rag -->|investment queries| invest
+  rag -->|support queries| support
+
+  banking --> tools
+  upi --> tools
+  banking --> llm
+  upi --> llm
+  rag --> llm
+  
+  loan --> ragSvc
+  invest --> ragSvc
+  support --> llm
+  
+  ragSvc --> loanEn
+  ragSvc --> loanHi
+  ragSvc --> investEn
+  ragSvc --> investHi
+
+  supervisor --> beChat
+  beChat --> client
