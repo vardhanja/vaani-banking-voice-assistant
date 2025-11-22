@@ -574,29 +574,59 @@ Web Speech API integration for voice input.
 
 ### useTextToSpeech (`hooks/useTextToSpeech.js`)
 
-Text-to-speech for AI responses.
+Text-to-speech for AI responses using **Web Speech API**.
+
+**Technology**: Browser-based `window.speechSynthesis` (SpeechSynthesis API)
 
 **Features:**
-- Speak text aloud
+- Speak text aloud using browser voices
 - Stop speaking
-- Voice selection
+- Pause and resume playback
+- Voice selection (system voices)
 - Rate and pitch control
 - Queue management
+- No external API calls required
 
 **Methods:**
-- `speak(text, language)`: Speak text
-- `stop()`: Stop speaking
+- `speak(text, language)`: Speak text using selected voice
+- `stop()`: Stop speaking immediately
+- `pause()`: Pause current speech
+- `resume()`: Resume paused speech
 - `isSpeaking`: Boolean state
+- `getVoices()`: Get available system voices
 
 **Voice Selection:**
-- Hindi voices preferred for hi-IN
-- English voices for en-IN
-- Fallback to default
+- Hindi voices preferred for hi-IN (e.g., "hi-IN" locale)
+- English voices for en-IN (e.g., "en-IN", "en-US" locale)
+- Automatic voice matching based on language
+- Fallback to default system voice
 
 **Configuration:**
-- `rate`: Speech rate (0.5-2.0)
-- `pitch`: Voice pitch (0.0-2.0)
-- `volume`: Volume (0.0-1.0)
+- `rate`: Speech rate (0.5-2.0, default: 1.0)
+- `pitch`: Voice pitch (0.0-2.0, default: 1.0)
+- `volume`: Volume (0.0-1.0, default: 1.0)
+
+**Browser Support:**
+- Chrome/Edge: Excellent (multiple voices)
+- Safari: Good (limited voices)
+- Firefox: Good
+- Mobile: iOS Safari, Chrome Android
+
+**Example Usage:**
+```javascript
+const { speak, stop, isSpeaking } = useTextToSpeech();
+
+// Speak English
+speak("Your balance is ₹10,000", "en-IN");
+
+// Speak Hindi
+speak("आपका बैलेंस ₹10,000 है", "hi-IN");
+
+// Stop if speaking
+if (isSpeaking) {
+  stop();
+}
+```
 
 ### useVoiceMode (`hooks/useVoiceMode.js`)
 

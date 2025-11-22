@@ -10,6 +10,9 @@ Vaani is a comprehensive banking solution that combines voice biometrics, natura
 - 🎤 Voice-based authentication with biometric verification
 - 💬 AI-powered conversational banking (English & Hindi)
 - 💸 Hello UPI payments with voice commands
+- 🏦 Intelligent loan information (7 types) via RAG system
+- 💰 Investment scheme guidance (PPF, NPS, SSY, ELSS, FD, RD, NSC)
+- 🌐 Full Hindi language support with bilingual RAG databases
 - 🔐 Secure device binding and multi-factor authentication
 - 📱 Modern React frontend with voice interface
 - 🤖 LangGraph multi-agent AI backend (Ollama/OpenAI)
@@ -32,8 +35,9 @@ Vaani is a comprehensive banking solution that combines voice biometrics, natura
 **AI Backend (Port 8001)**
 - LangGraph for agent orchestration
 - Ollama (Qwen 2.5 7B, Llama 3.2 3B)
+- ChromaDB vector database for RAG
+- HuggingFace embeddings (sentence-transformers/all-MiniLM-L6-v2)
 - LangSmith for observability
-- Azure TTS (optional)
 
 ### System Components
 
@@ -46,6 +50,16 @@ Frontend (React)  →  Backend API (FastAPI)  →  Database (SQLite)
 ## Documentation
 
 **📖 Complete documentation available in the [`documentation/`](./documentation/) folder:**
+
+### System Overview
+
+- **[System Architecture](./documentation/system_architecture.md)** - Complete system design
+  - Three-tier architecture (Frontend, Backend API, AI Backend)
+  - Data flow diagrams for voice login, banking queries, RAG, UPI payments
+  - Technology stack details
+  - Security architecture
+  - Deployment and scalability
+  - Monitoring and troubleshooting
 
 ### Getting Started
 
@@ -65,8 +79,10 @@ Frontend (React)  →  Backend API (FastAPI)  →  Database (SQLite)
 
 - **[AI Modules](./documentation/ai_modules.md)** - AI agent system documentation
   - Multi-agent architecture
+  - RAG supervisor with specialized agents (Loan, Investment, Customer Support)
   - Intent classification
-  - Banking, UPI, and FAQ agents
+  - Banking and UPI agents
+  - RAG service with vector databases
   - LLM services (Ollama/OpenAI)
   - Tools and orchestration
 
@@ -77,6 +93,18 @@ Frontend (React)  →  Backend API (FastAPI)  →  Database (SQLite)
   - Voice features
 
 ### Feature Documentation
+
+- **[Investment Schemes](./documentation/investment_schemes.md)** - Investment information system
+  - 7 investment schemes with detailed information
+  - RAG-based retrieval from PDF documents
+  - Bilingual support (English/Hindi)
+  - Structured information cards
+
+- **[Hindi Language Support](./documentation/hindi_support.md)** - Complete Hindi implementation
+  - Hindi vector databases
+  - Hindi PDF document generation
+  - Font management and extraction
+  - Bilingual RAG system
 
 - **[UPI Payment Flow](./documentation/upi_payment_flow.md)** - Hello UPI implementation
   - Complete payment flow

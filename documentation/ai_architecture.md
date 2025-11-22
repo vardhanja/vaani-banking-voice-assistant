@@ -17,19 +17,45 @@ Diagram: `documentation/ai_architecture.mmd`
 - ConversationState keeps a safe, predictable structure between agents and supervisor.
 
 ## Agents
-- Banking Agent: balances, transactions, reminders, transfers (uses domain tools + LLM)
-- UPI Agent: UPI payment flows (emits multi‑step `structured_data`)
-- RAG Supervisor: routes product/FAQ queries to domain specialists
-- Greeting Agent: deterministic greetings
-- Feedback Agent: collects ratings/complaints
+- **Banking Agent**: balances, transactions, reminders, transfers (uses domain tools + LLM)
+- **UPI Agent**: UPI payment flows (emits multi‑step `structured_data`)
+- **RAG Supervisor**: routes loan/investment/support queries to specialized agents
+- **Greeting Agent**: deterministic greetings
+- **Feedback Agent**: collects ratings/complaints
 
 ## RAG Specialists
-- Loan / Investment / Customer Support specialists retrieve context via `RAGService` (Chroma + embeddings) and draft answers with `LLMService`.
+The RAG system uses a supervisor pattern with three specialized agents:
+
+### Loan Agent (`ai/agents/rag_agents/loan_agent.py`)
+- Handles 7 loan types: Home, Personal, Car, Education, Business, Gold, Agriculture
+- Retrieves from `loan_products` (English) and `loan_products_hindi` (Hindi) vector databases
+- Returns structured loan cards with interest rates, eligibility, features
+- Keywords: loan, ऋण, कर्ज, होम लोन, personal loan, etc.
+
+### Investment Agent (`ai/agents/rag_agents/investment_agent.py`)
+- Handles 7 investment schemes: PPF, NPS, SSY, ELSS, FD, RD, NSC
+- Retrieves from `investment_schemes` (English) and `investment_schemes_hindi` (Hindi) vector databases
+- Returns structured investment cards with returns, tenure, tax benefits
+- Keywords: investment, निवेश, scheme, योजना, PPF, NPS, etc.
+
+### Customer Support Agent (`ai/agents/rag_agents/customer_support_agent.py`)
+- Provides contact information (email, phone, hours)
+- Handles general support queries
+- Keywords: help, support, contact, सहायता, संपर्क, etc.
+
+All specialists retrieve context via `RAGService` (ChromaDB + HuggingFace embeddings) and generate responses with `LLMService`.
 
 ## Shared Services
-- LLMService: wraps Ollama/OpenAI providers (models set in `ai/.env`)
-- RAGService: ingestion, retrieval, and context assembly with lightweight caching
-- Tools: safe interfaces for backend banking/UPI operations
+- **LLMService**: wraps Ollama/OpenAI providers (models set in `ai/.env`)
+  - Primary model: `qwen2.5:7b` (comprehensive responses)
+  - Fast model: `llama3.2:3b` (quick classification)
+- **RAGService**: ingestion, retrieval, and context assembly with lightweight caching
+  - 4 vector databases: `loan_products`, `loan_products_hindi`, `investment_schemes`, `investment_schemes_hindi`
+  - HuggingFace embeddings: `sentence-transformers/all-MiniLM-L6-v2`
+  - ChromaDB for vector storage
+  - 120-second context cache (TTL)
+  - Metadata filtering by language and document type
+- **Tools**: safe interfaces for backend banking/UPI operations
 
 ## Request → Response
 1. Backend posts `/api/chat` with message and session info
@@ -38,10 +64,14 @@ Diagram: `documentation/ai_architecture.mmd`
 4. Supervisor returns `{ response, structured_data?, statement_data? }`
 
 ## Localization
-- Today: English embeddings
-- Short‑term: translate non‑English → English for retrieval, translate answer back
-- Medium‑term: switch to multilingual embeddings and re‑index
-- Long‑term: add multi‑language corpora with language filters
+- **Current implementation**: Bilingual RAG with separate vector databases
+  - English databases: `loan_products`, `investment_schemes`
+  - Hindi databases: `loan_products_hindi`, `investment_schemes_hindi`
+  - Language detection from user query
+  - Same HuggingFace embeddings for both languages
+- **Short‑term optimization**: translate non‑English → English for retrieval, translate answer back
+- **Medium‑term upgrade**: switch to multilingual embeddings (e.g., `paraphrase-multilingual-MiniLM-L12-v2`) and re‑index
+- **Long‑term vision**: add multi‑language corpora with language filters and regional language support
 
 ## Extensibility
 - New intent/agent: update classifier prompt + router, implement agent, register route key

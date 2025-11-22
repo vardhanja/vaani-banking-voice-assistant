@@ -13,7 +13,17 @@ Welcome to the complete documentation for Vaani Banking Voice Assistant.
 - Environment setup
 - Running all services with `python run_services.py`
 
-### 🏗️ Module Documentation
+### 🏗️ Architecture
+
+**[System Architecture](./system_architecture.md)** - Complete system overview
+- Three-tier architecture (Frontend, Backend API, AI Backend)
+- Data flow diagrams
+- Technology stack
+- Security architecture
+- Deployment considerations
+- Scalability and monitoring
+
+### 📦 Module Documentation
 
 #### Backend
 **[Backend Modules](./backend_modules.md)** - Complete backend documentation
@@ -27,9 +37,11 @@ Welcome to the complete documentation for Vaani Banking Voice Assistant.
 #### AI System
 **[AI Modules](./ai_modules.md)** - AI agent system documentation
 - Hybrid supervisor architecture
-- Multi-agent orchestration (Intent Classifier, Banking Agent, UPI Agent, FAQ Agent)
+- Multi-agent orchestration (Intent Classifier, Banking Agent, UPI Agent, RAG Agent)
+- RAG System (Loan Agent, Investment Agent, Customer Support Agent)
 - LangGraph workflow
 - LLM services (Ollama, OpenAI)
+- RAG service with ChromaDB vector databases
 - Tools (Banking tools, UPI tools)
 - Configuration and deployment
 
@@ -42,6 +54,24 @@ Welcome to the complete documentation for Vaani Banking Voice Assistant.
 - State management
 
 ### 💡 Feature Documentation
+
+#### Investment Schemes
+**[Investment Schemes](./investment_schemes.md)** - Investment information system
+- 7 investment schemes (PPF, NPS, SSY, ELSS, FD, RD, NSC)
+- RAG-based information retrieval
+- Structured investment cards
+- Bilingual support (English/Hindi)
+- Frontend integration
+- Query examples and troubleshooting
+
+#### Hindi Language Support
+**[Hindi Support](./hindi_support.md)** - Complete Hindi implementation
+- Hindi vector databases (loan + investment)
+- Hindi PDF document generation
+- Font management and extraction
+- Bilingual RAG system
+- Query examples in Hindi
+- Performance and accuracy metrics
 
 #### UPI Payments
 **[UPI Payment Flow](./upi_payment_flow.md)** - Hello UPI implementation
@@ -70,6 +100,7 @@ Welcome to the complete documentation for Vaani Banking Voice Assistant.
 - **[Hybrid Supervisor Pattern](./hybrid_supervisor_pattern.md)** - Agent orchestration pattern
 
 **Architecture Diagrams:**
+- `system_architecture.mmd` - Complete system diagram (all 3 services)
 - `ai_architecture.mmd` - AI system diagram
 - `backend_architecture.mmd` - Backend structure
 - `frontend_architecture.mmd` - Frontend structure
@@ -89,11 +120,17 @@ Welcome to the complete documentation for Vaani Banking Voice Assistant.
 
 ### For New Users
 1. Start with [Setup Guide](./setup_guide.md)
-2. Run the application
-3. Read [Frontend Modules](./frontend_modules.md) to understand the UI
-4. Try [UPI Payment Flow](./upi_payment_flow.md) for payments
+2. Read [System Architecture](./system_architecture.md) for overview
+3. Run the application
+4. Read [Frontend Modules](./frontend_modules.md) to understand the UI
+5. Try [UPI Payment Flow](./upi_payment_flow.md) for payments
 
 ### For Developers
+
+**System Overview:**
+1. [System Architecture](./system_architecture.md) - Complete system design
+2. Technology stack and deployment
+3. Data flow examples
 
 **Backend Development:**
 1. [Backend Modules](./backend_modules.md) - API structure
@@ -140,16 +177,19 @@ Welcome to the complete documentation for Vaani Banking Voice Assistant.
 - LangGraph
 - Ollama (qwen2.5:7b, llama3.2:3b)
 - LangSmith
-- Azure TTS (optional)
+- ChromaDB (vector database for RAG)
+- HuggingFace embeddings (sentence-transformers/all-MiniLM-L6-v2)
 
 ## 📋 Documentation Checklist
 
 ### Completed Documentation
-- ✅ Setup Guide
+- ✅ Setup Guide (with RAG ingestion steps)
 - ✅ Backend Modules
-- ✅ AI Modules
+- ✅ AI Modules (updated with RAG agents)
 - ✅ Frontend Modules
 - ✅ UPI Payment Flow
+- ✅ Investment Schemes Feature
+- ✅ Hindi Language Support
 - ✅ Architecture Diagrams
 - ✅ Voice Authentication
 

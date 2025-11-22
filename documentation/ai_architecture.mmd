@@ -18,15 +18,22 @@ flowchart TD
   end
 
   subgraph "RAG Specialists (ai/agents/rag_agents)"
-    loan["Loan Specialist"]
-    invest["Investment Specialist"]
-    support["Customer Support Specialist"]
+    loan["Loan Agent<br/>(7 loan types)"]
+    invest["Investment Agent<br/>(7 schemes)"]
+    support["Customer Support Agent<br/>(contact info)"]
   end
 
   subgraph "Services (ai/services)"
-    llm["LLMService (Ollama/OpenAI)"]
-    ragSvc["RAGService (Chroma + embeddings)"]
+    llm["LLMService<br/>(Ollama: qwen2.5:7b, llama3.2:3b)"]
+    ragSvc["RAGService<br/>(ChromaDB + HuggingFace embeddings)"]
     tools["Banking/UPI Tools"]
+  end
+
+  subgraph "Vector Databases (ai/chroma_db)"
+    loanEn["loan_products (English)"]
+    loanHi["loan_products_hindi (Hindi)"]
+    investEn["investment_schemes (English)"]
+    investHi["investment_schemes_hindi (Hindi)"]
   end
 
   entry --> supervisor
@@ -39,18 +46,24 @@ flowchart TD
   router -->|greeting| greet
   router -->|feedback| feedback
 
-  rag --> loan
-  rag --> invest
-  rag --> support
+  rag -->|loan queries| loan
+  rag -->|investment queries| invest
+  rag -->|support queries| support
 
   banking --> tools
   upi --> tools
   banking --> llm
   upi --> llm
   rag --> llm
+  
   loan --> ragSvc
   invest --> ragSvc
-  support --> ragSvc
+  support --> llm
+  
+  ragSvc --> loanEn
+  ragSvc --> loanHi
+  ragSvc --> investEn
+  ragSvc --> investHi
 
   supervisor --> beChat
   beChat --> client

@@ -1,0 +1,228 @@
+%% Vaani Banking Voice Assistant - Complete System Architecture
+%% This diagram shows all three microservices and their interactions
+
+graph TB
+    subgraph "User Interface"
+        user["👤 User<br/>(Voice/Text)"]
+        browser["🌐 Web Browser<br/>localhost:5173"]
+    end
+
+    subgraph "Frontend Layer - React + Vite"
+        direction TB
+        
+        subgraph "Pages"
+            login["LoginPage<br/>(Voice Auth)"]
+            chat["ChatPage<br/>(Main Interface)"]
+            profile["ProfilePage"]
+            trans["TransactionPage"]
+        end
+        
+        subgraph "Voice Services"
+            stt["Web Speech API<br/>(Speech-to-Text)"]
+            tts["Browser TTS<br/>(Text-to-Speech)"]
+        end
+        
+        subgraph "API Clients"
+            aiClient["aiClient.js<br/>(AI Backend)"]
+            apiClient["api.js<br/>(Backend API)"]
+        end
+    end
+
+    subgraph "Backend API Layer - FastAPI + SQLAlchemy"
+        direction TB
+        
+        subgraph "API Endpoints :8000"
+            authAPI["Auth Endpoints<br/>/api/auth/*"]
+            userAPI["User Endpoints<br/>/api/users/*"]
+            acctAPI["Account Endpoints<br/>/api/accounts/*"]
+            txnAPI["Transaction Endpoints<br/>/api/transactions/*"]
+            upiAPI["UPI Endpoints<br/>/api/upi/*"]
+        end
+        
+        subgraph "Services"
+            userSvc["UserService"]
+            acctSvc["AccountService"]
+            txnSvc["TransactionService"]
+            voiceSvc["VoiceVerificationService<br/>(Resemblyzer)"]
+            deviceSvc["DeviceBindingService"]
+            upiSvc["UPIService"]
+        end
+        
+        subgraph "Database - SQLite"
+            db[("vaani.db<br/>━━━━━━━━<br/>users<br/>accounts<br/>transactions<br/>device_bindings<br/>voice_profiles<br/>reminders<br/>upi_payments")]
+        end
+    end
+
+    subgraph "AI Backend Layer - LangGraph + Ollama"
+        direction TB
+        
+        subgraph "API :8001"
+            chatAPI["POST /api/chat<br/>POST /api/chat/stream<br/>GET /health"]
+        end
+        
+        subgraph "Orchestrator"
+            supervisor["HybridSupervisor"]
+            router["IntentRouter<br/>(Llama 3.2 3B)"]
+            state["ConversationState"]
+        end
+        
+        subgraph "Agents"
+            greetAgent["Greeting Agent"]
+            bankAgent["Banking Agent<br/>(Qwen 2.5 7B)"]
+            upiAgent["UPI Agent<br/>(Qwen 2.5 7B)"]
+            ragSuper["RAG Supervisor"]
+            feedAgent["Feedback Agent"]
+        end
+        
+        subgraph "RAG Specialists"
+            loanAgent["Loan Agent<br/>(7 types)"]
+            investAgent["Investment Agent<br/>(7 schemes)"]
+            supportAgent["Customer Support"]
+        end
+        
+        subgraph "Services"
+            llmSvc["LLMService<br/>(Ollama)"]
+            ragSvc["RAGService<br/>(ChromaDB)"]
+        end
+        
+        subgraph "Tools"
+            bankTools["Banking Tools<br/>━━━━━━━━<br/>get_balance<br/>get_transactions<br/>transfer_funds<br/>reminders"]
+            upiTools["UPI Tools<br/>━━━━━━━━<br/>initiate_payment<br/>verify_pin<br/>check_status"]
+        end
+    end
+
+    subgraph "External Services"
+        direction TB
+        
+        subgraph "Ollama :11434"
+            qwen["qwen2.5:7b<br/>(Primary)"]
+            llama["llama3.2:3b<br/>(Fast)"]
+        end
+        
+        subgraph "Vector Databases"
+            chromaDB[("ChromaDB<br/>━━━━━━━━<br/>loan_products<br/>loan_products_hindi<br/>investment_schemes<br/>investment_schemes_hindi")]
+        end
+        
+        subgraph "Document Sources"
+            docs["PDF Documents<br/>backend/documents/"]
+        end
+        
+        subgraph "Observability (Optional)"
+            langsmith["LangSmith<br/>(Tracing)"]
+        end
+    end
+
+    %% User Interactions
+    user -->|Voice/Text| browser
+    browser --> login
+    browser --> chat
+    browser --> profile
+    browser --> trans
+    
+    %% Frontend Voice Flow
+    chat --> stt
+    stt -.->|Transcribed Text| chat
+    chat --> tts
+    
+    %% Frontend to Backend API
+    login --> apiClient
+    profile --> apiClient
+    trans --> apiClient
+    apiClient -->|HTTP| authAPI
+    apiClient -->|HTTP| userAPI
+    apiClient -->|HTTP| acctAPI
+    apiClient -->|HTTP| txnAPI
+    
+    %% Frontend to AI Backend
+    chat --> aiClient
+    aiClient -->|HTTP| chatAPI
+    
+    %% AI Backend Flow
+    chatAPI --> supervisor
+    supervisor --> state
+    supervisor --> router
+    
+    router -->|greeting| greetAgent
+    router -->|banking| bankAgent
+    router -->|upi| upiAgent
+    router -->|loan/investment| ragSuper
+    router -->|feedback| feedAgent
+    
+    ragSuper -->|loan query| loanAgent
+    ragSuper -->|investment query| investAgent
+    ragSuper -->|support query| supportAgent
+    
+    %% Agent to Services
+    greetAgent --> state
+    feedAgent --> state
+    
+    bankAgent --> llmSvc
+    bankAgent --> bankTools
+    
+    upiAgent --> llmSvc
+    upiAgent --> upiTools
+    
+    loanAgent --> ragSvc
+    loanAgent --> llmSvc
+    
+    investAgent --> ragSvc
+    investAgent --> llmSvc
+    
+    supportAgent --> llmSvc
+    
+    %% Tools to Backend API
+    bankTools -->|HTTP Calls| acctAPI
+    bankTools -->|HTTP Calls| txnAPI
+    upiTools -->|HTTP Calls| upiAPI
+    
+    %% Services to External
+    llmSvc --> qwen
+    llmSvc --> llama
+    ragSvc --> chromaDB
+    
+    %% Backend API to Database
+    authAPI --> userSvc
+    authAPI --> voiceSvc
+    authAPI --> deviceSvc
+    userAPI --> userSvc
+    acctAPI --> acctSvc
+    txnAPI --> txnSvc
+    upiAPI --> upiSvc
+    
+    userSvc --> db
+    acctSvc --> db
+    txnSvc --> db
+    voiceSvc --> db
+    deviceSvc --> db
+    upiSvc --> db
+    
+    %% RAG Document Flow
+    docs -.->|Ingested| chromaDB
+    
+    %% Observability
+    supervisor -.->|Traces| langsmith
+    llmSvc -.->|Metrics| langsmith
+    
+    %% Response Flow Back
+    supervisor -->|Response| chatAPI
+    chatAPI -->|JSON| aiClient
+    aiClient -->|Display| chat
+    
+    authAPI -->|JWT Token| apiClient
+    acctAPI -->|Account Data| apiClient
+    txnAPI -->|Transaction Data| apiClient
+    apiClient -->|Render| profile
+    apiClient -->|Render| trans
+
+    %% Styling
+    classDef frontend fill:#61dafb,stroke:#333,stroke-width:2px,color:#000
+    classDef backend fill:#009688,stroke:#333,stroke-width:2px,color:#fff
+    classDef ai fill:#ff6b6b,stroke:#333,stroke-width:2px,color:#fff
+    classDef external fill:#ffd93d,stroke:#333,stroke-width:2px,color:#000
+    classDef db fill:#4a90e2,stroke:#333,stroke-width:2px,color:#fff
+    
+    class login,chat,profile,trans,stt,tts,aiClient,apiClient frontend
+    class authAPI,userAPI,acctAPI,txnAPI,upiAPI,userSvc,acctSvc,txnSvc,voiceSvc,deviceSvc,upiSvc backend
+    class chatAPI,supervisor,router,state,greetAgent,bankAgent,upiAgent,ragSuper,feedAgent,loanAgent,investAgent,supportAgent,llmSvc,ragSvc,bankTools,upiTools ai
+    class qwen,llama,docs,langsmith external
+    class db,chromaDB db

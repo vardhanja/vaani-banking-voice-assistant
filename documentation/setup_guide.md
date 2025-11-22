@@ -150,6 +150,30 @@ You should see `(.venv)` prefix in your terminal prompt.
 uv pip install -r requirements.txt
 ```
 
+### Extract Hindi Fonts (Optional but Recommended)
+
+For Hindi PDF document generation:
+
+```bash
+# Navigate to documents folder
+cd backend/documents
+
+# Extract Devanagari fonts from macOS system
+python extract_system_hindi_font.py
+
+# Verify fonts extracted
+ls fonts/
+# Should show: DevanagariSangamMNRegular.ttf, DevanagariSangamMNBold.ttf
+
+# Test font rendering (creates test_hindi_font.pdf)
+python verify_hindi_font.py
+
+# Return to project root
+cd ../..
+```
+
+**Note**: This step is only needed if you plan to regenerate Hindi PDFs. Pre-generated Hindi PDFs are already included in the repository.
+
 ### Install AI Module Dependencies
 
 ```bash
@@ -230,9 +254,106 @@ cd ..
 
 ---
 
-## Step 6: Initialize Database (Optional)
+## Step 6: Setup RAG Vector Databases (Optional but Recommended)
 
-The database will be created automatically on first run. To seed sample data:
+The RAG (Retrieval-Augmented Generation) system provides intelligent answers about loans and investments using PDF documents.
+
+### Generate Documents (If Not Present)
+
+Pre-generated PDFs are already included, but you can regenerate them:
+
+**English Loan Documents**:
+```bash
+cd backend/documents
+python create_loan_product_docs.py
+# Creates 7 PDFs in loan_products/
+cd ../..
+```
+
+**Hindi Loan Documents**:
+```bash
+cd backend/documents
+python create_loan_product_docs_hindi.py
+# Creates 7 PDFs in loan_products_hindi/
+cd ../..
+```
+
+**English Investment Documents**:
+```bash
+cd backend/documents
+python create_investment_scheme_docs.py
+# Creates investment scheme PDFs in investment_schemes/
+cd ../..
+```
+
+**Hindi Investment Documents**:
+```bash
+cd backend/documents
+python create_investment_scheme_docs_hindi.py
+# Creates investment scheme PDFs in investment_schemes_hindi/
+cd ../..
+```
+
+### Ingest Documents into Vector Databases
+
+**English Documents** (Loans + Investments):
+```bash
+cd ai
+
+# Ingest English loan documents
+python ingest_documents.py
+# Creates: chroma_db/loan_products/
+
+# Ingest English investment documents
+python ingest_investment_documents.py
+# Creates: chroma_db/investment_schemes/
+
+cd ..
+```
+
+**Hindi Documents** (Loans + Investments):
+```bash
+cd ai
+
+# Ingest Hindi documents (both loans and investments)
+python ingest_documents_hindi.py
+# Creates: 
+#   - chroma_db/loan_products_hindi/
+#   - chroma_db/investment_schemes_hindi/
+
+cd ..
+```
+
+**Expected Completion Time**: 2-5 minutes total
+
+**What This Does**:
+- Loads PDF documents
+- Splits text into chunks (1000 characters each)
+- Generates embeddings using `sentence-transformers/all-MiniLM-L6-v2`
+- Stores in ChromaDB vector database
+- Enables semantic search for loan/investment queries
+
+**Verify Success**:
+```bash
+# Check vector databases exist
+ls ai/chroma_db/
+# Should show:
+#   loan_products/
+#   loan_products_hindi/
+#   investment_schemes/
+#   investment_schemes_hindi/
+```
+
+**Skip This Step If**:
+- You don't need RAG features
+- Vector databases already exist
+- You're just testing basic banking features
+
+---
+
+## Step 7: Initialize SQLite Database (Optional)
+
+The SQLite database (`backend/db/vaani.db`) will be created automatically on first run with the necessary schema. To populate it with sample data for testing:
 
 ```bash
 # Ensure virtual environment is activated
@@ -242,16 +363,24 @@ source .venv/bin/activate
 python -m backend.db.seed
 ```
 
-This creates:
-- Sample user accounts
+**What This Creates:**
+- Sample user accounts with different profiles
+- Bank accounts with initial balances
 - Transaction history
-- Reminders
-- Beneficiaries
-- Device bindings
+- Reminders and beneficiaries
+- Device bindings for testing
+
+**Database Details:**
+- **Type**: SQLite3 (file-based, no server required)
+- **Location**: `backend/db/vaani.db`
+- **Size**: ~100KB initially, grows with usage
+- **Backup**: Simply copy the `vaani.db` file
+
+**Note**: The database is SQLite for development. For production, the system can be configured to use PostgreSQL by setting environment variables.
 
 ---
 
-## Step 7: Run All Services
+## Step 8: Run All Services
 
 Now you're ready to start all three components!
 

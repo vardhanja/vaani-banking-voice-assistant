@@ -5,7 +5,7 @@
 The AI module is the conversational intelligence layer of Vaani, built with **LangGraph**, **Ollama (Qwen 2.5)**, and **LangSmith**. It handles natural language understanding, intent classification, banking operations, and provides bilingual (Hindi/English) support through a multi-agent architecture.
 
 **Port**: 8001  
-**Tech Stack**: FastAPI, LangGraph, Ollama, LangSmith, Azure TTS
+**Tech Stack**: FastAPI, LangGraph, Ollama, LangSmith, ChromaDB
 
 ---
 
@@ -24,11 +24,14 @@ ai/
 │   ├── intent_classifier.py    # Intent classification
 │   ├── banking_agent.py        # Banking operations agent
 │   ├── upi_agent.py            # UPI payment agent
-│   ├── faq_agent.py            # General FAQ agent
+│   ├── rag_agent.py            # RAG supervisor agent
 │   ├── greeting_agent.py       # Greeting and chitchat
 │   ├── feedback_agent.py       # User feedback handling
 │   ├── router.py               # Agent routing logic
-│   └── rag_agents/             # RAG-based agents (future)
+│   └── rag_agents/             # Specialized RAG agents
+│       ├── customer_support_agent.py  # Customer support queries
+│       ├── loan_agent.py              # Loan product information
+│       └── investment_agent.py        # Investment scheme information
 │
 ├── orchestrator/                # Hybrid supervisor pattern
 │   ├── supervisor.py           # Main supervisor
@@ -40,7 +43,7 @@ ai/
 │   ├── ollama_service.py       # Ollama integration
 │   ├── openai_service.py       # OpenAI integration
 │   ├── azure_tts_service.py    # Azure Text-to-Speech
-│   └── rag_service.py          # RAG (future)
+│   └── rag_service.py          # RAG service with vector database
 │
 ├── tools/                       # LangChain tools for agents
 │   ├── banking_tools.py        # Banking operations tools
@@ -56,8 +59,15 @@ ai/
 │   ├── supervisor/             # Supervisor patterns
 │   └── workers/                # Worker agents
 │
-├── chroma_db/                   # Vector database for RAG
+├── chroma_db/                   # Vector databases for RAG
+│   ├── loan_products/          # English loan documents
+│   ├── loan_products_hindi/    # Hindi loan documents
+│   ├── investment_schemes/     # English investment documents
+│   └── investment_schemes_hindi/ # Hindi investment documents
 ├── documents/                   # Documents for RAG ingestion
+├── ingest_documents.py          # English document ingestion script
+├── ingest_documents_hindi.py    # Hindi document ingestion script
+├── ingest_investment_documents.py # Investment scheme ingestion
 └── logs/                        # Application logs
 ```
 
@@ -201,25 +211,210 @@ Specialized agent for UPI payments following RBI guidelines.
 - Transaction verification
 - RBI guideline adherence
 
-### 5. FAQ Agent (`agents/faq_agent.py`)
+### 5. RAG Agent System
 
-Handles general banking questions without database tools.
+The RAG (Retrieval-Augmented Generation) agent is a specialized supervisor that orchestrates multiple sub-agents to handle questions about banking products, loans, investments, and customer support using document retrieval.
 
-**Model Used**: Qwen 2.5 7B
+**Architecture**: Hybrid supervisor pattern with 3 specialized agents:
+1. **Loan Agent**: Handles loan product queries
+2. **Investment Agent**: Handles investment scheme queries  
+3. **Customer Support Agent**: Handles contact and general support queries
 
-**Topics Covered:**
-- Interest rates
-- Account types
-- Loan products
-- Bank hours
-- Branch locations
-- General banking procedures
+**Model Used**: Qwen 2.5 7B (primary), Llama 3.2 3B (extraction)
 
-**Agent Behavior:**
-- Pure LLM-based responses
-- No tool usage
-- Leverages banking knowledge
-- Provides helpful, accurate information
+#### RAG Supervisor (`agents/rag_agent.py`)
+
+The main coordinator that routes queries to specialized agents.
+
+**Routing Logic:**
+- Detects query type (loan, investment, customer support)
+- Identifies specific products (e.g., "home loan", "PPF")
+- Routes to appropriate specialist agent
+- Handles general queries with LLM
+
+**Query Detection:**
+```python
+# Loan keywords
+"loan", "interest rate", "emi", "eligibility", "home loan", 
+"personal loan", "auto loan", "education loan", etc.
+
+# Investment keywords  
+"investment", "scheme", "ppf", "nps", "ssy", "fixed deposit",
+"tax saving", "retirement", etc.
+
+# Customer support keywords
+"customer support", "contact", "phone number", "email", 
+"address", "branch", "helpline", etc.
+```
+
+**Hindi Support:**
+- Fully bilingual (English and Hindi)
+- Detects Hindi keywords: "लोन", "निवेश", "योजना", etc.
+- Routes to Hindi vector database when language=`hi-IN`
+
+#### Loan Agent (`agents/rag_agents/loan_agent.py`)
+
+Handles loan product queries using RAG with PDF documents.
+
+**Capabilities:**
+- Retrieves context from loan product PDFs
+- Generates structured loan information cards
+- Handles 7 loan types: Home, Personal, Auto, Education, Business, Gold, Loan Against Property
+- Provides general loan exploration interface
+
+**Loan Types Supported:**
+
+| Loan Type | Identifier | Features |
+|-----------|------------|----------|
+| Home Loan | `home_loan` | Interest: 8.35-9.50%, Up to ₹5 crore, 30 years |
+| Personal Loan | `personal_loan` | Interest: 10.49-18%, Up to ₹25 lakh, No collateral |
+| Auto Loan | `auto_loan` | Interest: 8.75-12.5%, Up to ₹50 lakh, New/used cars |
+| Education Loan | `education_loan` | Interest: 8.5-12%, Up to ₹50 lakh, India/abroad |
+| Business Loan | `business_loan` | Interest: 11-18%, Up to ₹50 lakh, MSME/SME |
+| Gold Loan | `gold_loan` | Interest: 10-15%, Up to ₹25 lakh, Quick approval |
+| Loan Against Property | `loan_against_property` | Interest: 9.5-12.5%, Up to ₹5 crore, 15 years |
+
+**Features:**
+- **RAG Retrieval**: Fetches relevant sections from PDF documents
+- **Metadata Filtering**: Filters by specific loan type for precision
+- **Structured Cards**: Extracts key information into JSON format
+- **Fallback Data**: Provides default information if extraction fails
+- **General Exploration**: Shows interactive loan selection table
+- **Hindi/English Text Cleaning**: Removes mixed scripts in English mode
+
+**Query Flow:**
+1. Detect if general loan query ("what loans available?")
+2. If general → Return loan selection table
+3. If specific loan → Detect loan type
+4. Retrieve context from vector database (with metadata filter)
+5. Extract structured information using LLM
+6. Generate loan information card
+7. Fallback to default data if extraction fails
+
+**Structured Data Format:**
+```json
+{
+  "type": "loan",
+  "loanInfo": {
+    "name": "Home Loan",
+    "interest_rate": "8.35% - 9.50% p.a.",
+    "min_amount": "Rs. 5 lakhs",
+    "max_amount": "Rs. 5 crores",
+    "tenure": "Up to 30 years",
+    "eligibility": "Age 21-65 years, minimum income Rs. 25,000 per month",
+    "description": "Comprehensive home loan scheme to buy your dream home",
+    "features": [
+      "Competitive interest rates",
+      "Long tenure (up to 30 years)",
+      "Loan-to-value ratio up to 90%",
+      "Floating and fixed rate options"
+    ]
+  }
+}
+```
+
+#### Investment Agent (`agents/rag_agents/investment_agent.py`)
+
+Handles investment scheme queries using RAG with PDF documents.
+
+**Capabilities:**
+- Retrieves context from investment scheme PDFs
+- Generates structured investment information cards
+- Handles 7 investment schemes: PPF, NPS, SSY, ELSS, FD, RD, NSC
+- Provides general investment exploration interface
+
+**Investment Schemes Supported:**
+
+| Scheme | Identifier | Features |
+|--------|------------|----------|
+| PPF | `ppf` | Interest: 7.1%, ₹500-₹1.5L/year, 15 years, Tax-free |
+| NPS | `nps` | Returns: 8-12%, No limit, Retirement scheme, Extra ₹50K tax deduction |
+| Sukanya Samriddhi Yojana | `ssy` | Interest: 8.2%, ₹250-₹1.5L/year, Girl child scheme, 21 years |
+| ELSS | `elss` | Market-linked, ₹500+, 3-year lock-in, Tax saving mutual fund |
+| Fixed Deposit | `fd` | Interest: 6-8%, ₹1000+, 7 days-10 years, Safe investment |
+| Recurring Deposit | `rd` | Interest: 6-7.5%, ₹100/month, Regular savings |
+| NSC | `nsc` | Interest: 7-9%, ₹1000+, 5 years, Government backed |
+
+**Features:**
+- **RAG Retrieval**: Fetches relevant sections from PDF documents
+- **Metadata Filtering**: Filters by specific scheme type for precision
+- **Structured Cards**: Extracts key information into JSON format
+- **Fallback Data**: Provides default information if extraction fails
+- **General Exploration**: Shows interactive investment selection table
+- **Hindi/English Text Cleaning**: Removes mixed scripts in English mode
+- **Validation**: Ensures extracted data matches detected scheme type
+
+**Query Flow:**
+1. Detect if general investment query ("what investments available?")
+2. If general → Return investment selection table
+3. If specific scheme → Detect scheme type
+4. Retrieve context from vector database (with metadata filter)
+5. Extract structured information using LLM
+6. Validate extracted data matches scheme type
+7. Generate investment information card
+8. Fallback to default data if extraction/validation fails
+
+**Structured Data Format:**
+```json
+{
+  "type": "investment",
+  "investmentInfo": {
+    "name": "PPF",
+    "interest_rate": "7.1% per annum",
+    "min_amount": "Rs. 500",
+    "max_amount": "Rs. 1.5 lakhs",
+    "tenure": "15 years",
+    "eligibility": "Any Indian resident can open PPF account",
+    "tax_benefits": "Section 80C: Up to Rs. 1.5 lakhs deduction, tax-free interest and maturity",
+    "description": "Long-term tax-saving investment scheme backed by Government of India",
+    "features": [
+      "Government guaranteed - zero risk",
+      "Tax-free interest and maturity",
+      "Flexible investment options",
+      "Partial withdrawal after 7 years"
+    ]
+  }
+}
+```
+
+#### Customer Support Agent (`agents/rag_agents/customer_support_agent.py`)
+
+Handles customer support and contact information queries.
+
+**Capabilities:**
+- Detects contact/support queries
+- Returns structured customer support card
+- Provides bank contact information
+- Handles non-banking queries with polite redirects
+
+**Contact Keywords Detected:**
+```
+"customer support", "customer care", "contact", "phone number", 
+"email", "address", "headquarters", "branch address", "website",
+"helpline", "support", "call", "location", etc.
+```
+
+**Structured Data Format:**
+```json
+{
+  "type": "customer_support",
+  "supportInfo": {
+    "headquarters_address": "Sun National Bank Tower, 123 Banking Street, Connaught Place, New Delhi - 110001, India",
+    "customer_care_number": "+91-1800-123-4567",
+    "branch_address": "Visit any of our 500+ branches across India. Find nearest branch at sunnationalbank.online/branches",
+    "email": "customercare@sunnationalbank.online",
+    "website": "sunnationalbank.online",
+    "business_hours": "Monday to Friday: 9:00 AM - 6:00 PM, Saturday: 9:00 AM - 2:00 PM (IST)"
+  }
+}
+```
+
+**Default Behavior:**
+For non-contact queries, uses LLM to provide general banking assistance with:
+- Polite acknowledgment
+- Banking service focus
+- Warm, professional tone
+- Gentle redirect to banking topics
 
 ### 6. Greeting Agent (`agents/greeting_agent.py`)
 
@@ -462,38 +657,206 @@ OPENAI_MODEL = "gpt-4"
 OPENAI_FAST_MODEL = "gpt-3.5-turbo"
 ```
 
-### Azure TTS Service (`services/azure_tts_service.py`)
+---
 
-Text-to-speech using Azure Cognitive Services.
+Retrieval-Augmented Generation service for document-based Q&A.
 
 **Features:**
-- High-quality Indian voices
-- Multi-language support
-- Hindi and English voices
-- Low latency
+- PDF document ingestion
+- Vector database with ChromaDB
+- Semantic similarity search
+- Metadata filtering
+- Context caching (120s TTL, 128 entries)
+- Multi-language support (English, Hindi)
+- Multiple document types (loans, investments)
 
-**Supported Voices:**
-- Hindi: `hi-IN-SwaraNeural` (female), `hi-IN-MadhurNeural` (male)
-- English: `en-IN-NeerjaNeural` (female), `en-IN-PrabhatNeural` (male)
+**Architecture:**
+```
+Documents (PDFs)
+    ↓
+Load & Parse (PyPDFLoader)
+    ↓
+Chunk Text (RecursiveCharacterTextSplitter)
+    ↓
+Generate Embeddings (HuggingFace)
+    ↓
+Store in ChromaDB (Vector Database)
+    ↓
+Retrieve on Query (Similarity Search)
+    ↓
+Return Context to LLM
+```
 
-**Methods:**
-
-#### `synthesize_speech(text, language, voice_name=None)`
-**Purpose**: Convert text to speech
-
-**Parameters:**
-- `text`: Text to synthesize
-- `language`: Language code (`hi-IN`, `en-IN`)
-- `voice_name`: Specific voice (optional)
-
-**Returns**: Audio bytes (WAV format)
+**Embedding Model:**
+- `sentence-transformers/all-MiniLM-L6-v2`
+- 384 dimensions
+- CPU-optimized
+- Supports 100+ languages
+- No external API calls
 
 **Configuration:**
 ```python
-AZURE_TTS_ENABLED = true
-AZURE_TTS_KEY = "your_key"
-AZURE_TTS_REGION = "centralindia"
+chunk_size = 1000        # Characters per chunk
+chunk_overlap = 200      # Overlap between chunks
+k = 4                    # Number of retrieved documents
 ```
+
+**Methods:**
+
+#### `__init__(documents_path, persist_directory, collection_name, chunk_size, chunk_overlap)`
+**Purpose**: Initialize RAG service
+
+**Parameters:**
+- `documents_path`: Path to PDF documents folder
+- `persist_directory`: Where to store vector database
+- `collection_name`: ChromaDB collection name
+- `chunk_size`: Text chunk size (default: 1000)
+- `chunk_overlap`: Chunk overlap (default: 200)
+
+#### `load_pdf_documents()`
+**Purpose**: Load all PDFs from documents folder
+
+**Metadata Added:**
+- `source`: PDF filename
+- `loan_type` or `scheme_type`: Product identifier
+- `document_type`: "loan" or "investment"
+
+**Returns**: List of Document objects
+
+#### `chunk_documents(documents)`
+**Purpose**: Split documents into smaller chunks
+
+**Uses**: `RecursiveCharacterTextSplitter`
+
+**Separators**: `\n\n`, `\n`, `.`, `!`, `?`, `,`, ` `
+
+**Returns**: List of chunked documents
+
+#### `create_vector_store(documents)`
+**Purpose**: Create vector database from documents
+
+**Process:**
+1. Generate embeddings for all chunks
+2. Store in ChromaDB with metadata
+3. Persist to disk
+4. Return Chroma instance
+
+**Returns**: Chroma vector store
+
+#### `load_vector_store()`
+**Purpose**: Load existing vector database from disk
+
+**Returns**: Chroma instance or None
+
+#### `initialize(force_rebuild=False)`
+**Purpose**: Initialize RAG system
+
+**Behavior:**
+- If `force_rebuild=False`: Load existing vector store
+- If not exists or `force_rebuild=True`: Create new vector store
+- Logs initialization mode
+
+#### `retrieve(query, k=4, filter=None)`
+**Purpose**: Retrieve relevant documents for a query
+
+**Parameters:**
+- `query`: Search query string
+- `k`: Number of documents to retrieve
+- `filter`: Optional metadata filter (e.g., `{"loan_type": "home_loan"}`)
+
+**Returns**: List of Document objects with content and metadata
+
+**Example:**
+```python
+# Retrieve with filter
+results = rag_service.retrieve(
+    query="What is the interest rate?",
+    k=2,
+    filter={"loan_type": "home_loan"}
+)
+```
+
+#### `retrieve_with_scores(query, k=4)`
+**Purpose**: Retrieve documents with similarity scores
+
+**Returns**: List of (Document, score) tuples
+
+#### `get_context_for_query(query, k=4, filter=None)`
+**Purpose**: Get formatted context string for LLM
+
+**Process:**
+1. Check cache for query
+2. If miss, retrieve documents
+3. Format with source metadata
+4. Cache result (120s TTL)
+5. Return formatted string
+
+**Caching:**
+- Cache key: `normalized_query|k=N|filter={...}`
+- TTL: 120 seconds
+- Max size: 128 entries
+- LRU eviction
+
+**Context Format:**
+```
+[Source 1: Home Loan - home_loan_product_guide.pdf]
+Interest Rate: 8.35% - 9.50% per annum
+Minimum Loan Amount: Rs. 5 lakhs
+...
+
+[Source 2: Home Loan - home_loan_product_guide.pdf]
+Eligibility Criteria:
+- Age: 21 to 65 years
+...
+```
+
+**Returns**: Formatted context string
+
+#### `get_rag_service(documents_type="loan", language="en-IN")`
+**Purpose**: Get or create RAG service instance (singleton pattern)
+
+**Parameters:**
+- `documents_type`: `"loan"` or `"investment"`
+- `language`: `"en-IN"` or `"hi-IN"`
+
+**Returns**: Cached RAG service instance
+
+**Database Mapping:**
+
+| Type | Language | Documents Path | Collection Name | Persist Directory |
+|------|----------|---------------|----------------|------------------|
+| loan | en-IN | backend/documents/loan_products | loan_products | chroma_db/loan_products |
+| loan | hi-IN | backend/documents/loan_products_hindi | loan_products_hindi | chroma_db/loan_products_hindi |
+| investment | en-IN | backend/documents/investment_schemes | investment_schemes | chroma_db/investment_schemes |
+| investment | hi-IN | backend/documents/investment_schemes_hindi | investment_schemes_hindi | chroma_db/investment_schemes_hindi |
+
+**Example Usage:**
+```python
+# Get English loan service
+loan_service = get_rag_service("loan", "en-IN")
+
+# Get Hindi investment service
+investment_service = get_rag_service("investment", "hi-IN")
+
+# Retrieve context
+context = loan_service.get_context_for_query(
+    "What is the interest rate for home loans?",
+    k=3,
+    filter={"loan_type": "home_loan"}
+)
+```
+
+**Performance:**
+- First call: Loads/creates vector store (~1-5s)
+- Subsequent calls: Instant (cached instance)
+- Retrieval: 50-200ms depending on query complexity
+- Cache hit: <1ms
+
+**Hindi Support:**
+- Same embedding model works for Hindi (multilingual)
+- Separate vector databases for Hindi documents
+- Automatic routing based on language parameter
+- Preserves Devanagari script in context
 
 ---
 
@@ -555,23 +918,6 @@ data: is
 data: ₹10,000.00
 data: [DONE]
 ```
-
-### Text-to-Speech
-
-**POST /api/tts**
-
-Convert text to speech audio.
-
-**Request:**
-```json
-{
-  "text": "Your balance is ₹10,000",
-  "language": "en-IN",
-  "use_azure": true
-}
-```
-
-**Response**: Audio file (WAV format)
 
 ### Voice Verification
 
@@ -644,13 +990,6 @@ LLM_PROVIDER=ollama
 LANGCHAIN_TRACING_V2=true
 LANGCHAIN_API_KEY=lsv2_pt_your_key
 LANGCHAIN_PROJECT=vaani-banking-assistant
-```
-
-**Azure TTS (Optional):**
-```env
-AZURE_TTS_ENABLED=true
-AZURE_TTS_KEY=your_azure_key
-AZURE_TTS_REGION=centralindia
 ```
 
 **OpenAI (Optional):**

@@ -588,9 +588,38 @@ Dependency injection for services.
 
 ### Engine Setup (`db/engine.py`)
 
-- Uses SQLite database
-- Connection pooling
-- Auto-commit disabled for transactions
+**Database**: SQLite (default)
+- **File Location**: `backend/db/vaani.db`
+- **Type**: SQLite3 (file-based, no server required)
+- **Connection pooling**: Managed by SQLAlchemy
+- **Auto-commit**: Disabled for transactions
+- **Migrations**: Supports future PostgreSQL migration
+
+**Why SQLite?**
+- Zero configuration required
+- Perfect for development and prototyping
+- File-based (no separate database server)
+- Easy to backup (just copy vaani.db file)
+- Full SQL feature support
+- Production-ready for small to medium workloads
+
+**Configuration** (`db/config.py`):
+```python
+# Default SQLite database
+DEFAULT_SQLITE_PATH = "backend/db/vaani.db"
+DATABASE_URL = "sqlite:///backend/db/vaani.db"
+
+# Can be overridden with environment variables
+DB_BACKEND=sqlite  # or postgresql for production
+DATABASE_URL=sqlite:///path/to/db.db
+```
+
+**Future PostgreSQL Support**:
+The system is designed to easily switch to PostgreSQL for production:
+```bash
+export DB_BACKEND=postgresql
+export DATABASE_URL=postgresql://user:pass@localhost/vaani
+```
 
 ### Database Seeding (`db/seed.py`)
 
