@@ -19,4 +19,20 @@ ai/.env
 *.log
 ai/logs/
 
-.pytest_cache/
+# Database files
+*.db
+*.sqlite3
+*.sqlite
+backend/db/*.db
+
+# Vector database files (ChromaDB)
+ai/chroma_db/**/*.bin
+ai/chroma_db/**/*.sqlite3
+ai/chroma_db/**/chroma.sqlite3
+
+# macOS system files
+.DS_Store
+**/.DS_Store
+
+# Binary files from ChromaDB
+*.bin
