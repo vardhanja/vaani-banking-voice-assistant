@@ -111,9 +111,9 @@ sudo mkdir -p /var/lib/dokku/data/storage/backend
 sudo chown dokku:dokku /var/lib/dokku/data/storage/backend
 sudo dokku storage:mount backend /var/lib/dokku/data/storage/backend:/app/data
 
-# Use the Dockerfile-based builder that lives inside /backend
+# Use the Dockerfile-based builder at the repo root
 sudo dokku builder:set backend selected dockerfile
-sudo dokku builder:set backend build-dir backend
+sudo dokku builder:set backend build-dir .
 
 # Environment (adjust host/IPs to your VM)
 sudo dokku config:set backend \
