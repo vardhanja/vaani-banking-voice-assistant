@@ -28,5 +28,5 @@ COPY backend /code/backend
 # Set the working directory to the parent of the package
 WORKDIR /code
 
-# Run the app
-CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "backend.app:app", "--bind", "0.0.0.0:8000", "--timeout", "120"]
+# Set the command to run the application
+CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "backend.main:app", "--bind", "0.0.0.0:${PORT:-8000}"]
