@@ -111,6 +111,10 @@ sudo mkdir -p /var/lib/dokku/data/storage/backend
 sudo chown dokku:dokku /var/lib/dokku/data/storage/backend
 sudo dokku storage:mount backend /var/lib/dokku/data/storage/backend:/app/data
 
+# Use the Dockerfile-based builder that lives inside /backend
+sudo dokku builder:set backend selected dockerfile
+sudo dokku builder:set backend build-dir backend
+
 # Environment (adjust host/IPs to your VM)
 sudo dokku config:set backend \
   DB_BACKEND=sqlite \
@@ -127,9 +131,10 @@ sudo dokku config:set backend \
 **Deploy from macOS (repo root):**
 ```bash
 git remote add dokku-backend dokku@<VM-IP>:backend || true
-git subtree push --prefix backend dokku-backend deployment_trails
+git push dokku-backend deployment_trails:master
 ```
-(Substitute `deployment_trails` with whichever branch you are deploying.)
+
+> Prefer a full-branch push when using the Dockerfile builder so Dokku can access the repository root. If you want to send only the backend folder, run `git subtree push --prefix backend dokku-backend deployment_trails` instead.
 
 ---
 
