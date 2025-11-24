@@ -29,4 +29,4 @@ COPY backend /code/backend
 WORKDIR /code
 
 # Set the command to run the application
-CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "backend.main:app", "--bind", "0.0.0.0:${PORT:-8000}"]
+CMD ["sh", "-c", "gunicorn -k uvicorn.workers.UvicornWorker backend.main:app --bind 0.0.0.0:${PORT:-8000}"]
