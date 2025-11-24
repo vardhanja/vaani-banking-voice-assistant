@@ -96,5 +96,33 @@ else
     echo "✅ All vector databases found"
 fi
 
-echo "🌟 Starting server on http://localhost:8001"
+# Determine API port (defaults to 8001)
+API_PORT=8001
+if [ -f .env ]; then
+    ENV_PORT=$(grep '^API_PORT=' .env | tail -n 1 | cut -d '=' -f2 | tr -d ' \r\t')
+    if [ -n "$ENV_PORT" ]; then
+        API_PORT="$ENV_PORT"
+    fi
+fi
+
+# Ensure the port is available before starting
+if lsof -ti tcp:"$API_PORT" >/dev/null 2>&1; then
+    echo "⚠️  Port $API_PORT is currently in use. Attempting to free it..."
+    PIDS=$(lsof -ti tcp:"$API_PORT")
+    if [ -n "$PIDS" ]; then
+        echo "$PIDS" | xargs kill -TERM >/dev/null 2>&1 || true
+        sleep 1
+        if lsof -ti tcp:"$API_PORT" >/dev/null 2>&1; then
+            echo "🔪 Sending SIGKILL to stubborn process on port $API_PORT"
+            echo "$PIDS" | xargs kill -KILL >/dev/null 2>&1 || true
+        fi
+    fi
+    if lsof -ti tcp:"$API_PORT" >/dev/null 2>&1; then
+        echo "❌ Unable to free port $API_PORT. Please stop the process manually and retry."
+        exit 1
+    fi
+    echo "✅ Port $API_PORT is now free."
+fi
+
+echo "🌟 Starting server on http://localhost:${API_PORT}"
 python main.py

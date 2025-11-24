@@ -1,10 +1,11 @@
 # Full project dependencies for local development
 # This file includes ALL dependencies for Backend, AI Backend, and shared components
-# For Vercel deployment, use requirements-backend.txt instead
+# For backend-only deployments (Vercel, Dokku), use backend/requirements.txt instead
 
 # Core FastAPI and server
 fastapi>=0.115.0
 uvicorn[standard]>=0.31.0
+gunicorn>=23.0.0
 
 # Database
 sqlalchemy>=2.0.0
@@ -48,6 +49,7 @@ tenacity==8.5.0
 redis==5.1.1
 structlog==24.4.0
 sentry-sdk==2.15.0
+setuptools>=68.0.0
 
 # Testing
 pytest==8.3.3

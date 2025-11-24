@@ -13,9 +13,10 @@ from dataclasses import dataclass
 from typing import Optional
 
 
+DEFAULT_SQLITE_FILENAME = "vaani.db"
 DEFAULT_SQLITE_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "vaani.db",
+    DEFAULT_SQLITE_FILENAME,
 )
 
 
@@ -31,7 +32,7 @@ class DatabaseConfig:
 
 
 def _build_default_sqlite_url() -> str:
-    return f"sqlite:///{DEFAULT_SQLITE_PATH}"
+    return f"sqlite:///{_resolve_sqlite_path()}"
 
 
 def load_database_config() -> DatabaseConfig:
@@ -79,6 +80,24 @@ def _parse_optional_int(raw: Optional[str]) -> Optional[int]:
     if not raw:
         return None
     return int(raw)
+
+
+def _resolve_sqlite_path() -> str:
+    """Determine the SQLite file path, favoring Dokku mounts when available."""
+
+    custom_path = os.getenv("DB_SQLITE_PATH")
+    if custom_path:
+        return os.path.abspath(custom_path)
+
+    data_dir = os.getenv("DB_DATA_DIR") or os.getenv("DATA_DIR")
+    if data_dir:
+        return os.path.abspath(os.path.join(data_dir, DEFAULT_SQLITE_FILENAME))
+
+    dokku_data_dir = "/app/data"
+    if os.path.isdir(dokku_data_dir):
+        return os.path.join(dokku_data_dir, DEFAULT_SQLITE_FILENAME)
+
+    return DEFAULT_SQLITE_PATH
 
 
 __all__ = ["DatabaseConfig", "load_database_config"]

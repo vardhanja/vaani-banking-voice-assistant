@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass
 from typing import Optional, Dict, Any
 import httpx
@@ -14,9 +15,15 @@ import numpy as np
 
 from .voice_verification import VoiceVerificationService
 
-# AI Backend Configuration
-AI_BACKEND_URL = "http://localhost:8001"
-AI_VERIFICATION_ENABLED = True  # Can be made configurable
+# AI Backend Configuration (environment aware for Dokku)
+AI_BACKEND_URL = (
+    os.getenv("AI_BACKEND_URL")
+    or os.getenv("OLLAMA_URL")
+    or "http://localhost:8001"
+)
+AI_VERIFICATION_ENABLED = (
+    os.getenv("AI_VERIFICATION_ENABLED", "1").lower() in {"1", "true", "yes"}
+)
 AI_VERIFICATION_TIMEOUT = 8.0  # seconds (increased to allow for LLM processing time)
 
 logger = logging.getLogger(__name__)

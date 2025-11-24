@@ -26,12 +26,12 @@ python run_services.py
 
 ## Vercel Deployment
 
-**Uses**: `requirements-backend.txt` (minimal dependencies)
+**Uses**: `backend/requirements.txt` (minimal dependencies)
 
 **How it works**:
-1. `vercel-build.sh` runs before build
+1. `backend/deploy/vercel-build.sh` runs before build
 2. Hides `pyproject.toml` and `uv.lock`
-3. Copies `requirements-backend.txt` → `requirements.txt`
+3. Copies `backend/requirements.txt` → project root `requirements.txt`
 4. Vercel installs from `requirements.txt` (minimal dependencies)
 
 **Dependencies**: Only backend dependencies:
@@ -42,18 +42,18 @@ python run_services.py
 - **Excludes**: AI/ML libraries (LangChain, ChromaDB, PyTorch, etc.)
 
 **Files**:
-- `requirements-backend.txt` - Minimal backend dependencies
-- `vercel-build.sh` - Build script that switches files
+- `backend/requirements.txt` - Minimal backend dependencies
+- `backend/deploy/vercel-build.sh` - Build script that switches files
 - `.vercelignore` - Excludes large files from deployment
 
 ## File Structure
 
 ```
-├── pyproject.toml              # Full dependencies (local dev via uv sync)
-├── requirements.txt            # Full dependencies (reference/backup)
-├── requirements-backend.txt     # Minimal dependencies (Vercel deployment)
-├── vercel-build.sh             # Build script (Vercel only)
-└── .vercelignore              # Excludes files from Vercel
+├── pyproject.toml                  # Full dependencies (local dev via uv sync)
+├── requirements.txt                # Full dependencies (reference/backup)
+├── backend/requirements.txt        # Minimal dependencies (backend deployment)
+├── backend/deploy/vercel-build.sh  # Build script (Vercel only)
+└── .vercelignore                  # Excludes files from Vercel
 ```
 
 ## Why This Approach?
@@ -68,7 +68,7 @@ python run_services.py
 
 - ✅ Local development is **NOT affected** - uses `pyproject.toml` via `uv sync`
 - ✅ `requirements.txt` is restored with full dependencies for reference
-- ✅ Vercel uses `requirements-backend.txt` via build script
+- ✅ Vercel uses `backend/requirements.txt` via the build script
 - ✅ Both environments work independently
 
 ## Troubleshooting
@@ -79,7 +79,7 @@ python run_services.py
 - Verify virtual environment is activated
 
 **Vercel deployment failing?**
-- Check `vercel-build.sh` is executable
-- Verify `requirements-backend.txt` exists
+- Check `backend/deploy/vercel-build.sh` is executable
+- Verify `backend/requirements.txt` exists
 - Check build logs for errors
 

@@ -12,17 +12,17 @@ For backend deployment, you **MUST** change the Install Command in Vercel projec
 4. Find **Install Command**
 5. Change from `uv sync` to:
    ```
-   pip install -r requirements-backend.txt
+   pip install -r backend/requirements.txt
    ```
 6. Click **Save**
 
 ## Why?
 
-The `pyproject.toml` includes dependencies for all three components (Backend, AI Backend, Frontend). The backend only needs a subset of these dependencies. Using `requirements-backend.txt` installs only what's needed, reducing deployment size from 4GB+ to under 500MB.
+The `pyproject.toml` includes dependencies for all three components (Backend, AI Backend, Frontend). The backend only needs a subset of these dependencies. Using `backend/requirements.txt` installs only what's needed, reducing deployment size from 4GB+ to under 500MB.
 
 ## Files Created:
 
-- `requirements-backend.txt` - Minimal backend dependencies only
+- `backend/requirements.txt` - Minimal backend dependencies only
 - `.vercelignore` - Excludes large files and AI/ML libraries
 
 ## Dependencies Included:

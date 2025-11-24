@@ -23,7 +23,7 @@ Complete guide to deploy Frontend and Backend on Vercel.
    - **Framework Preset**: Other
    - **Build Command**: Leave empty (Vercel will use `vercel.json`)
    - **Output Directory**: Leave empty
-   - **Install Command**: `uv sync` (or `pip install -r requirements.txt`)
+  - **Install Command**: `pip install -r backend/requirements.txt`
 
 ### Step 2: Verify vercel.json
 
@@ -33,14 +33,14 @@ Ensure `vercel.json` exists in root with:
   "version": 2,
   "builds": [
     {
-      "src": "main.py",
+      "src": "backend/main.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "main.py"
+      "dest": "backend/main.py"
     }
   ]
 }

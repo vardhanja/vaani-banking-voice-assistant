@@ -56,7 +56,7 @@ def main() -> None:
     _ensure_posix_shell(shell_path)
 
     service_commands = [
-        ("Backend", "python main.py"),
+    ("Backend", "python -m backend.main"),
         ("AI", "cd ai && ./run.sh"),
         ("Frontend", "cd frontend && npm run dev"),
     ]

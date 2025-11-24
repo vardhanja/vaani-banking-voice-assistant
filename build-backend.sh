@@ -1,11 +1,7 @@
 #!/bin/bash
-# Backend build script for Vercel
-# Installs only backend dependencies to reduce deployment size
+# Backwards-compatible shim. The real script lives in backend/deploy.
 
-set -e
+set -euo pipefail
 
-echo "🔧 Installing backend dependencies only..."
-pip install -r requirements-backend.txt
-
-echo "✅ Backend dependencies installed successfully"
+exec bash backend/deploy/build-backend.sh "$@"
 

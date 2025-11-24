@@ -8,7 +8,7 @@ Backend deployment was failing with `ERR_OUT_OF_RANGE` error because Vercel was 
 ## Solution Applied ✅
 
 ### 1. Created Minimal Backend Requirements
-**File**: `requirements-backend.txt`
+**File**: `backend/requirements.txt`
 - Contains only backend dependencies (~50 packages vs 187)
 - Excludes: PyTorch, LangChain, ChromaDB, Transformers, Ollama
 - Includes: FastAPI, SQLAlchemy, Resemblyzer (for voice), PostgreSQL driver
@@ -20,7 +20,7 @@ Backend deployment was failing with `ERR_OUT_OF_RANGE` error because Vercel was 
 - Excludes virtual environments and cache files
 
 ### 3. Build Script
-**File**: `build-backend.sh`
+**File**: `backend/deploy/build-backend.sh`
 - Alternative build script (optional)
 
 ## ⚠️ CRITICAL: Update Vercel Settings
@@ -33,19 +33,19 @@ You **MUST** update your Vercel Backend project settings:
 3. Scroll to **Build & Development Settings**
 4. Find **Install Command**
 5. **Change from**: `uv sync`
-6. **Change to**: `pip install -r requirements-backend.txt`
+6. **Change to**: `pip install -r backend/requirements.txt`
 7. Click **Save**
 
 ### Why This Works:
 - `uv sync` reads from `pyproject.toml` (all dependencies)
-- `pip install -r requirements-backend.txt` installs only backend dependencies
+- `pip install -r backend/requirements.txt` installs only backend dependencies
 - Reduces deployment size from 4GB+ to ~500MB
 
 ## Files Created:
 
-✅ `requirements-backend.txt` - Minimal backend dependencies  
+✅ `backend/requirements.txt` - Minimal backend dependencies  
 ✅ `.vercelignore` - Excludes large files  
-✅ `build-backend.sh` - Build script (optional)  
+✅ `backend/deploy/build-backend.sh` - Build script (optional)  
 ✅ `VERCEL_BACKEND_SETUP.md` - Setup instructions  
 ✅ `DEPLOYMENT_FIX.md` - This file
 
@@ -53,7 +53,7 @@ You **MUST** update your Vercel Backend project settings:
 
 1. **Commit and push these files:**
    ```bash
-   git add requirements-backend.txt .vercelignore build-backend.sh
+   git add backend/requirements.txt .vercelignore backend/deploy/build-backend.sh
    git commit -m "Fix: Add minimal backend requirements for Vercel deployment"
    git push origin deploy-vercel
    ```
@@ -74,7 +74,7 @@ You **MUST** update your Vercel Backend project settings:
 ## Verification:
 
 After deployment, check:
-- Build logs show `pip install -r requirements-backend.txt`
+- Build logs show `pip install -r backend/requirements.txt`
 - Deployment size is reasonable
 - Backend API responds at `/docs`
 - No missing dependency errors

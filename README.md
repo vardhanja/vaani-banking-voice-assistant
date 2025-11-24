@@ -133,6 +133,12 @@ Frontend (React)  →  Backend API (FastAPI)  →  Database (SQLite)
   - [AI README](./docs/AI_README.md)
   - [UPI Debugging](./docs/UPI_MODE_DEBUGGING.md)
 
+### Deployment Guides
+
+- **[Dokku + Cloudflare Tunnel](./documentation/dokku_cloudflare_deployment.md)** — Apple Silicon VM deployment with storage mounts, Ollama access, and tunnel mapping.
+- **[Deployment Guide](./DEPLOYMENT_GUIDE.md)** — General backend + AI deployment instructions.
+- **[Vercel Quick Reference](./VERCEL_QUICK_REFERENCE.md)** — Checklist for serverless deployments.
+
 ## Setup (macOS)
 
 Prerequisites
@@ -184,13 +190,13 @@ Review `ai/.env` for `OLLAMA_MODEL=qwen2.5:7b`, `OLLAMA_FAST_MODEL=llama3.2:3b`,
 python run_services.py
 ```
 This starts:
-- Backend: `python main.py` (port 8000)
+- Backend: `python -m backend.main` (port 8000)
 - AI: `cd ai && ./run.sh` (port 8001)
 - Frontend: `cd frontend && npm run dev` (port 5173)
 
 Optional manual runs
 ```
-python main.py
+python -m backend.main
 (cd ai && ./run.sh)
 (cd frontend && npm run dev)
 ```
