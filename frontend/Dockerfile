@@ -17,6 +17,9 @@ COPY . .
 # Build the application
 RUN npm run build
 
+# Copy the entrypoint into the build image so it can be carried into the final image
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
+
 # Production stage
 FROM node:20-slim AS production
 
@@ -28,8 +31,12 @@ RUN npm install -g serve
 # Copy the build output from the build stage
 COPY --from=build /app/dist ./dist
 
+# Copy entrypoint script from build stage into production image and make it executable
+COPY --from=build /app/docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
 # Expose the port the app will run on
 EXPOSE 3000
 
-# Start the application
-CMD ["serve", "-s", "dist", "-l", "3000"]
+# Start the application via entrypoint which injects runtime env and runs serve
+CMD ["/bin/sh", "/app/docker-entrypoint.sh"]
