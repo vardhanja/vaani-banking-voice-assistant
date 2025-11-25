@@ -87,7 +87,6 @@ ai/**
 .env.*.local
 
 # Scripts
-*.sh
 run.sh
 start.sh
 run_services.py
