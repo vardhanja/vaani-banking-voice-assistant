@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "buildCommand": "bash vercel-build-ai.sh",
   "builds": [
     {
       "src": "ai_main.py",
@@ -13,4 +14,3 @@
     }
   ]
 }
-
