@@ -172,17 +172,31 @@ class RAGService:
         
         if not use_openai:
             # Fallback to sentence-transformers (for local development)
-        try:
-            from langchain_community.embeddings import HuggingFaceEmbeddings
-            self.embeddings = HuggingFaceEmbeddings(
-                model_name="sentence-transformers/all-MiniLM-L6-v2",
-                model_kwargs={'device': 'cpu'},
-                encode_kwargs={'normalize_embeddings': True}
-            )
-            logger.info("rag_service_init", embedding_model="all-MiniLM-L6-v2")
-        except Exception as e:
-            logger.error("embeddings_init_failed", error=str(e))
-            raise
+            # Note: sentence-transformers not available in Vercel deployment
+            # Will use OpenAI embeddings instead
+            try:
+                from langchain_community.embeddings import HuggingFaceEmbeddings
+                self.embeddings = HuggingFaceEmbeddings(
+                    model_name="sentence-transformers/all-MiniLM-L6-v2",
+                    model_kwargs={'device': 'cpu'},
+                    encode_kwargs={'normalize_embeddings': True}
+                )
+                logger.info("rag_service_init", embedding_model="all-MiniLM-L6-v2")
+            except ImportError:
+                # sentence-transformers not available - use OpenAI embeddings
+                logger.warning("sentence_transformers_not_available", message="Using OpenAI embeddings instead")
+                if getattr(settings, 'openai_api_key', None):
+                    self.embeddings = OpenAIEmbeddings(
+                        api_key=settings.openai_api_key,
+                        model="text-embedding-ada-002"
+                    )
+                    logger.info("rag_service_init", embedding_model="openai-text-embedding-ada-002")
+                else:
+                    logger.error("no_embeddings_available", message="Neither sentence-transformers nor OpenAI available")
+                    raise RuntimeError("No embeddings available. Please set OPENAI_API_KEY or install sentence-transformers")
+            except Exception as e:
+                logger.error("embeddings_init_failed", error=str(e))
+                raise
         
         # Initialize text splitter (fallback for simple splitting)
         self.text_splitter = RecursiveCharacterTextSplitter(
