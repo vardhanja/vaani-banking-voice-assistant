@@ -1,0 +1,34 @@
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.sqlite
+venv
+.venv
+env/
+ENV/
+
+# Git
+.git
+
+# Docker
+**/Dockerfile*
+docker-compose.override.yml
+
+# Node
+node_modules
+dist
+
+# frontend build artifacts
+frontend/dist
+
+# Local files
+.DS_Store
+*.log
+*.db
+
+# IntelliJ / VSCode
+.idea
+.vscode

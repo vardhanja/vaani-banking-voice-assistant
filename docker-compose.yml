@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: vaani/backend:latest
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      - DATABASE_URL
+      - DB_BACKEND
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    volumes:
+      - ./:/app:delegated
+
+  ai:
+    build:
+      context: .
+      dockerfile: ai/Dockerfile
+    image: vaani/ai:latest
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      - API_PORT
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./ai/chroma_db:/app/chroma_db
+      - ./:/app:delegated
+    depends_on:
+      - backend
+
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=vaani
+      - POSTGRES_PASSWORD=vaani
+      - POSTGRES_DB=vaani_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: vaani/frontend:latest
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+    volumes:
+      - ./frontend:/app:ro
+
+volumes:
+  pgdata:
+  chroma:
