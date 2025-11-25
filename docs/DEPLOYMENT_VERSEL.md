@@ -16,8 +16,8 @@ frontend on Cloudflare Pages.
 ## Backend (FastAPI)
 
 1. Create a new Vercel project from the root of the repo.
-2. Set build command to `bash vercel-build.sh` and output directory to `.`.
-3. Use `requirements-backend.txt` via the provided build script.
+2. Set build command to `bash vercel-build.sh` (no output directory override needed).
+3. The build script emits a Vercel Build Output bundle that ships only the FastAPI serverless function plus dependencies from `requirements-backend.txt`.
 4. Configure environment variables:
    - `DB_BACKEND=postgresql`
    - `DATABASE_URL=<neon-url>`

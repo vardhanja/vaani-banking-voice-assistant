@@ -1,33 +1,63 @@
 #!/bin/bash
 # Vercel build script for backend
-# Ensures requirements-backend.txt is used instead of pyproject.toml
+# Uses the Build Output API to ship a single serverless function with trimmed deps
 
-set -e
+set -euo pipefail
 
 echo "🔧 Backend build script starting..."
 
-# Temporarily rename pyproject.toml so Vercel uses requirements-backend.txt
-if [ -f "pyproject.toml" ]; then
-    echo "📦 Temporarily hiding pyproject.toml..."
-    mv pyproject.toml pyproject.toml.backup
-fi
+OUTPUT_DIR=".vercel/output"
+FUNCTION_DIR="$OUTPUT_DIR/functions/api/index.func"
+PYTHON_DIR="$FUNCTION_DIR/python"
 
-# Hide uv.lock if it exists
-if [ -f "uv.lock" ]; then
-    echo "📦 Temporarily hiding uv.lock..."
-    mv uv.lock uv.lock.backup
-fi
+echo "🧹 Cleaning previous build output..."
+rm -rf "$OUTPUT_DIR"
+mkdir -p "$PYTHON_DIR"
 
-# Backup original requirements.txt (full dependencies for local dev)
-if [ -f "requirements.txt" ]; then
-    echo "💾 Backing up original requirements.txt..."
-    mv requirements.txt requirements.txt.full
-fi
+echo "📦 Installing backend dependencies into function bundle..."
+python3 -m pip install \
+        --no-deps \
+        --no-compile \
+        --no-cache-dir \
+        -r requirements-backend.txt \
+        -t "$PYTHON_DIR"
 
-# Use minimal backend requirements for Vercel deployment
-echo "📋 Using requirements-backend.txt for Vercel deployment..."
-cp requirements-backend.txt requirements.txt
+echo "📁 Copying backend source code into bundle..."
+cp -R backend "$PYTHON_DIR/"
+find "$PYTHON_DIR/backend" -type d -name '__pycache__' -prune -exec rm -rf {} +
+find "$PYTHON_DIR/backend" -type f -name '*.pyc' -delete
 
-echo "✅ Build preparation complete"
-echo "📝 Vercel will now use requirements-backend.txt (minimal dependencies) for installation"
+echo "📝 Creating serverless function entrypoint..."
+cat > "$FUNCTION_DIR/index.py" <<'PYCODE'
+import os
+import sys
+
+python_dir = os.path.join(os.path.dirname(__file__), "python")
+if python_dir not in sys.path:
+        sys.path.insert(0, python_dir)
+
+from backend.app import app  # noqa: E402  # FastAPI application instance
+
+__all__ = ("app",)
+PYCODE
+
+echo "⚙️ Writing function runtime config..."
+cat > "$FUNCTION_DIR/.vc-config.json" <<'JSON'
+{
+    "runtime": "python3.11",
+    "handler": "index.app"
+}
+JSON
+
+echo "🛣️ Generating build output routes config..."
+cat > "$OUTPUT_DIR/config.json" <<'JSON'
+{
+    "version": 3,
+    "routes": [
+        { "src": "/(.*)", "dest": "api/index" }
+    ]
+}
+JSON
+
+echo "✅ Build output ready for deployment"
 
