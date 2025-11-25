@@ -56,7 +56,10 @@ class Settings(BaseSettings):
     azure_tts_region: str = "centralindia"
     azure_tts_enabled: bool = False
     
-    # Database Configuration
+    # Backend API Configuration (for deployed backend)
+    backend_api_url: str = os.getenv("BACKEND_API_URL", "https://api.tech-tonic-ai.com")
+    
+    # Database Configuration (for local development only)
     database_url: str = "sqlite:///./vaani_banking.db"
     
     # Redis Configuration

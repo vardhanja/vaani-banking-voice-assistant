@@ -10,8 +10,15 @@ from datetime import datetime
 import base64
 
 # Add backend to path for database access
+# Handle both local development and Vercel deployment paths
 backend_path = Path(__file__).parent.parent / "backend"
-sys.path.insert(0, str(backend_path))
+if backend_path.exists():
+    sys.path.insert(0, str(backend_path))
+else:
+    # Try alternative path (for Vercel deployment where backend is in python/backend/)
+    alt_backend_path = Path(__file__).parent.parent.parent / "backend"
+    if alt_backend_path.exists():
+        sys.path.insert(0, str(alt_backend_path))
 
 from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware

@@ -136,19 +136,30 @@ echo "📝 Creating serverless function entrypoint..."
 cat > "$FUNCTION_DIR/index.py" <<'PYCODE'
 import os
 import sys
+import traceback
 
 # Add python directory to path (contains all dependencies and code)
 python_dir = os.path.join(os.path.dirname(__file__), "python")
 if python_dir not in sys.path:
     sys.path.insert(0, python_dir)
 
-# Import app directly from ai.main (ai_main.py path resolution might fail)
-# ai/main.py is at python/ai/main.py, so we can import directly
+# Import app directly from ai.main
+# ai/main.py is at python/ai/main.py, backend is at python/backend/
 try:
     from ai.main import app
-except ImportError:
-    # Fallback: try via ai_main.py
-    from ai_main import app
+except Exception as e:
+    # Log the error for debugging
+    import logging
+    logging.basicConfig(level=logging.ERROR)
+    logging.error(f"Failed to import ai.main: {e}")
+    logging.error(traceback.format_exc())
+    # Try fallback
+    try:
+        from ai_main import app
+    except Exception as e2:
+        logging.error(f"Failed to import ai_main: {e2}")
+        logging.error(traceback.format_exc())
+        raise
 
 __all__ = ("app",)
 PYCODE
