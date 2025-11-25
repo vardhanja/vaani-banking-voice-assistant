@@ -2,7 +2,9 @@
  * Utility functions for downloading loan and investment PDF documents
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+import { API_BASE_URL as RUNTIME_API_BASE } from "../runtimeEnv.js";
+
+const API_BASE_URL = RUNTIME_API_BASE ?? (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000");
 
 /**
  * Map sub-loan types to their parent loan types (for document download)

@@ -635,7 +635,10 @@ const Chat = ({ session, onSignOut }) => {
     
     try {
       // Verify PIN with backend - use API_BASE_URL from client.js
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+      // Prefer runtime-injected value (window.__env) via runtimeEnv helper
+      const API_BASE_URL = (typeof window !== 'undefined' && window.__env && window.__env.VITE_API_BASE_URL)
+        || import.meta.env.VITE_API_BASE_URL
+        || "http://localhost:8000";
       const response = await fetch(`${API_BASE_URL}/api/v1/upi/verify-pin`, {
         method: 'POST',
         headers: {
