@@ -38,7 +38,18 @@ class Settings(BaseSettings):
     
     # LLM Provider Selection
     # Options: "ollama" (local) or "openai" (cloud)
+    # If OPENAI_ENABLED is True and OPENAI_API_KEY is set, automatically use OpenAI
     llm_provider: str = "ollama"
+    
+    def model_post_init(self, __context):
+        """Post-initialization: auto-detect provider based on OpenAI settings"""
+        # Check LLM_PROVIDER env var first (takes precedence)
+        llm_provider_env = os.getenv("LLM_PROVIDER", "").lower()
+        if llm_provider_env in ("ollama", "openai"):
+            object.__setattr__(self, "llm_provider", llm_provider_env)
+        # Auto-detect provider: if OpenAI is enabled and API key is set, use OpenAI
+        elif self.openai_enabled and self.openai_api_key:
+            object.__setattr__(self, "llm_provider", "openai")
     
     # Azure TTS Configuration
     azure_tts_key: Optional[str] = None
