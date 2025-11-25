@@ -23,6 +23,10 @@ echo "📂 Working directory: $(pwd)"
 echo "📋 Files in current directory:"
 ls -la | head -10
 
+# Remove requirements.txt and pyproject.toml IMMEDIATELY to prevent Vercel auto-detection
+echo "🔒 Removing Python detection files to prevent Vercel auto-detection..."
+rm -f requirements.txt pyproject.toml 2>/dev/null || true
+
 # Create Build Output API structure IMMEDIATELY to tell Vercel we're using Build Output API
 OUTPUT_DIR=".vercel/output"
 FUNCTION_DIR="$OUTPUT_DIR/functions/api/index.func"
@@ -84,20 +88,8 @@ if [ -d "$INVEST_PDFS_DIR" ]; then
     echo "✅ Kept investment PDF: ppf_scheme_guide.pdf"
 fi
 
-# Backup full requirements.txt if it exists
-if [ -f "requirements.txt" ]; then
-    echo "📄 Backing up full requirements.txt and swapping in minimal list..."
-    mv requirements.txt requirements.txt.full 2>/dev/null || true
-fi
-
-# Copy minimal requirements for Vercel (BEFORE Vercel auto-detects)
-if [ -f "requirements.txt" ]; then
-    echo "📄 Backing up existing requirements.txt..."
-    mv requirements.txt requirements.txt.backup 2>/dev/null || true
-fi
-cp ai/requirements-vercel.txt requirements.txt
-echo "✅ Using minimal requirements: ai/requirements-vercel.txt"
-echo "📊 Requirements file size: $(wc -l < requirements.txt) lines"
+# requirements.txt and pyproject.toml already removed at start of script
+# This ensures Vercel doesn't try to auto-detect Python
 
 echo "🧹 Cleaning previous build output (keeping structure)..."
 # Don't remove the entire output dir - just clean the python directory
@@ -175,3 +167,9 @@ JSON
 echo "✅ Build output ready for deployment"
 echo "   RAG enabled with: 2 loan PDFs + 1 investment PDF"
 echo "   Vector store will be built on first use using OpenAI embeddings"
+echo "   Bundle size: $(du -sh "$OUTPUT_DIR" | cut -f1)"
+
+# Ensure Build Output API is properly recognized
+# Vercel should use ONLY .vercel/output and not try to build source files
+echo "✅ Build Output API structure complete"
+echo "   Vercel should use .vercel/output only (no additional builds needed)"

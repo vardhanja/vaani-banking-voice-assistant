@@ -172,17 +172,17 @@ class RAGService:
         
         if not use_openai:
             # Fallback to sentence-transformers (for local development)
-            try:
-                from langchain_community.embeddings import HuggingFaceEmbeddings
-                self.embeddings = HuggingFaceEmbeddings(
-                    model_name="sentence-transformers/all-MiniLM-L6-v2",
-                    model_kwargs={'device': 'cpu'},
-                    encode_kwargs={'normalize_embeddings': True}
-                )
-                logger.info("rag_service_init", embedding_model="all-MiniLM-L6-v2")
-            except Exception as e:
-                logger.error("embeddings_init_failed", error=str(e))
-                raise
+        try:
+            from langchain_community.embeddings import HuggingFaceEmbeddings
+            self.embeddings = HuggingFaceEmbeddings(
+                model_name="sentence-transformers/all-MiniLM-L6-v2",
+                model_kwargs={'device': 'cpu'},
+                encode_kwargs={'normalize_embeddings': True}
+            )
+            logger.info("rag_service_init", embedding_model="all-MiniLM-L6-v2")
+        except Exception as e:
+            logger.error("embeddings_init_failed", error=str(e))
+            raise
         
         # Initialize text splitter (fallback for simple splitting)
         self.text_splitter = RecursiveCharacterTextSplitter(

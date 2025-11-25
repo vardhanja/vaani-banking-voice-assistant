@@ -44,3 +44,13 @@ Thumbs.db
 # Keep build scripts - they're needed!
 # build.sh
 # vercel-build-ai.sh
+
+# Prevent Vercel from auto-detecting Python
+# Hide Python detection files - Build Output API handles everything
+# These files trigger Vercel's Python auto-detection
+../requirements.txt
+../pyproject.toml
+../uv.lock
+requirements.txt
+pyproject.toml
+uv.lock
