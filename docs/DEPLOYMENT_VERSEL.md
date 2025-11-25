@@ -24,6 +24,7 @@ frontend on Cloudflare Pages.
    - `JWT_SECRET_KEY=<generated secret>`
    - `AI_BASE_URL=https://ai.sunnationalbank.online`
    - `CORS_ALLOWED_ORIGINS=https://sunnationalbank.online,https://www.sunnationalbank.online`
+   - `VOICE_VERIFICATION_ENABLED=false` *(disables heavy Resemblyzer stack on Vercel)*
 5. Deploy and test `/health` endpoint.
 6. Map `api.sunnationalbank.online` CNAME to the Vercel deployment.
 
