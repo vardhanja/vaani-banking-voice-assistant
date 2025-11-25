@@ -2,6 +2,7 @@
 FastAPI application for AI backend
 Handles chat requests and TTS generation
 """
+import os
 import sys
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -105,16 +106,40 @@ app = FastAPI(
     description="AI-powered banking assistant backend",
 )
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+def _build_allowed_origins() -> List[str]:
+    """Return allowed CORS origins, including optional env overrides."""
+
+    default_origins = [
         "http://localhost:3000",
         "http://localhost:5173",
         "http://localhost:5174",
-        "https://*.vercel.app",  # Allow all Vercel deployments (production and preview)
-        "https://vaani-banking-voice-assistant-*.vercel.app",  # Specific pattern for your frontend
-    ],
+        "https://*.vercel.app",
+        "https://vaani-banking-voice-assistant-*.vercel.app",
+        "https://sunnationalbank.online",
+        "https://www.sunnationalbank.online",
+    ]
+
+    extra_origins = os.getenv("CORS_ALLOWED_ORIGINS", "")
+    if extra_origins:
+        default_origins.extend(
+            origin.strip()
+            for origin in extra_origins.split(",")
+            if origin.strip()
+        )
+
+    seen = set()
+    merged: List[str] = []
+    for origin in default_origins:
+        if origin not in seen:
+            merged.append(origin)
+            seen.add(origin)
+    return merged
+
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_build_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -217,33 +242,6 @@ async def chat(request: ChatRequest):
         # Input Guardrails: Check user input before processing
         guardrail_service = get_guardrail_service()
         input_check = await guardrail_service.check_input(
-            message=request.message,
-            language=request.language,
-            user_id=request.user_id
-        )
-        
-        if not input_check.passed:
-            # Log guardrail violation
-            logger.warning(
-                "guardrail_violation_input",
-                user_id=request.user_id,
-                violation_type=input_check.violation_type,
-                language=request.language,
-                message_preview=request.message[:100]
-            )
-            
-            # Return appropriate error message based on language
-            error_message = input_check.message
-            if not error_message:
-                # Fallback error messages
-                if request.language == "hi-IN":
-                    error_message = "मुझे खेद है, आपका संदेश संसाधित नहीं किया जा सका। कृपया अपना प्रश्न दोबारा बताएं।"
-                else:
-                    error_message = "I'm sorry, your message could not be processed. Please rephrase your question."
-            
-            return ChatResponse(
-                success=False,
-                response=error_message,
                 language=request.language,
                 timestamp=datetime.now().isoformat()
             )

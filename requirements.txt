@@ -28,6 +28,9 @@ resemblyzer>=0.1.2
 librosa>=0.10
 soundfile>=0.12
 
+# Packaging helpers
+setuptools>=68.0.0
+
 # AI/ML dependencies (for AI backend - not needed for Vercel backend deployment)
 langchain>=0.3.0
 langchain-community>=0.3.0
