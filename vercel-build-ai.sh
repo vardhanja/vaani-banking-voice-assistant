@@ -141,107 +141,192 @@ This file is executed when Vercel invokes the function.
 import os
 import sys
 import traceback
+import importlib.util
 
-# CRITICAL: Add python directory to sys.path FIRST, before any imports
-# This directory contains all dependencies and our application code
+# CRITICAL: Set up error handling FIRST, before any imports
+# This ensures we can catch errors even if imports fail
 _script_dir = os.path.dirname(os.path.abspath(__file__))
 _python_dir = os.path.join(_script_dir, "python")
+_import_errors = []
 
-# Ensure python_dir is in sys.path
-if not os.path.exists(_python_dir):
-    # If python_dir doesn't exist, this is a critical error
-    # Create a minimal error app and exit early
+# Function to create error app
+def _create_error_app(error_msg, error_type=None, traceback_str=None, additional_info=None):
+    """Create a FastAPI app that returns error information"""
     try:
         from fastapi import FastAPI
-        app = FastAPI()
+        app = FastAPI(title="AI Backend - Error")
+        
+        error_data = {
+            "error": error_msg,
+            "error_type": error_type or "Unknown",
+            "python_dir": _python_dir,
+            "python_dir_exists": os.path.exists(_python_dir),
+            "script_dir": _script_dir,
+            "current_dir": os.getcwd(),
+            "sys_path": sys.path[:10] if sys.path else []
+        }
+        
+        if traceback_str:
+            error_data["traceback"] = traceback_str
+        if additional_info:
+            error_data.update(additional_info)
         
         @app.get("/")
         @app.post("/")
-        def error():
-            return {
-                "error": "Python directory not found",
-                "python_dir": _python_dir,
-                "script_dir": _script_dir,
-                "current_dir": os.getcwd(),
-                "sys_path": sys.path[:10]
-            }
+        @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+        def error_handler(path: str = ""):
+            return error_data
+        
+        return app
     except Exception:
-        # If FastAPI isn't available, create a minimal WSGI app
+        # If FastAPI import fails, create minimal WSGI app
         def app(environ, start_response):
             status = '500 Internal Server Error'
             headers = [('Content-type', 'application/json')]
-            body = b'{"error": "Critical: Python directory not found and FastAPI unavailable"}'
+            import json
+            error_data = {"error": error_msg, "error_type": error_type or "Unknown"}
+            body = json.dumps(error_data).encode('utf-8')
             start_response(status, headers)
             return [body]
+        return app
+
+# Check if python_dir exists
+if not os.path.exists(_python_dir):
+    app = _create_error_app(
+        "Python directory not found",
+        "DirectoryNotFound",
+        additional_info={"python_dir": _python_dir}
+    )
 else:
-    # python_dir exists - add it to path and try to import
+    # Add python_dir to sys.path
     if _python_dir not in sys.path:
         sys.path.insert(0, _python_dir)
     
-    # Try to import the app - wrap everything in try/except to catch any import errors
+    # Try to import the app using multiple strategies
+    app = None
+    
+    # Strategy 1: Try importing ai.main directly
     try:
-        # First, try importing from ai.main (the actual app)
-        from ai.main import app
-    except Exception as e1:
-        # Log the first error for debugging
-        import_error = e1
-        error_traceback = traceback.format_exc()
+        import ai.main
+        app = ai.main.app
+        _import_errors.append("SUCCESS: Imported from ai.main")
+    except SystemExit as e:
+        # SystemExit means Python tried to exit - catch it!
+        app = _create_error_app(
+            f"SystemExit during import: {e}",
+            "SystemExit",
+            traceback.format_exc(),
+            {"exit_code": e.code if hasattr(e, 'code') else None}
+        )
+    except KeyboardInterrupt:
+        # Keyboard interrupt - shouldn't happen but catch it
+        app = _create_error_app(
+            "KeyboardInterrupt during import",
+            "KeyboardInterrupt",
+            traceback.format_exc()
+        )
+    except BaseException as e:
+        # Catch ALL exceptions including SystemExit, KeyboardInterrupt, etc.
+        _import_errors.append(f"ai.main import failed: {type(e).__name__}: {str(e)}")
+        error_tb = traceback.format_exc()
         
-        # Try fallback: ai_main.py (if it exists)
+        # Strategy 2: Try importing ai_main.py
         try:
-            from ai_main import app
-        except Exception as e2:
-            # Both imports failed - create error app with diagnostic info
+            import ai_main
+            app = ai_main.app
+            _import_errors.append("SUCCESS: Imported from ai_main (fallback)")
+        except BaseException as e2:
+            _import_errors.append(f"ai_main import failed: {type(e2).__name__}: {str(e2)}")
+            
+            # Strategy 3: Try using importlib to load module more safely
             try:
-                from fastapi import FastAPI
+                ai_main_path = os.path.join(_python_dir, "ai_main.py")
+                if os.path.exists(ai_main_path):
+                    spec = importlib.util.spec_from_file_location("ai_main", ai_main_path)
+                    if spec and spec.loader:
+                        ai_main_module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(ai_main_module)
+                        app = ai_main_module.app
+                        _import_errors.append("SUCCESS: Imported via importlib")
+                    else:
+                        raise ImportError("Could not create module spec")
+                else:
+                    raise ImportError("ai_main.py not found")
+            except BaseException as e3:
+                _import_errors.append(f"importlib import failed: {type(e3).__name__}: {str(e3)}")
                 
-                app = FastAPI(title="AI Backend - Import Error")
-                
-                @app.get("/")
-                @app.post("/")
-                @app.get("/health")
-                @app.post("/api/chat")
-                def error_handler():
-                    return {
-                        "error": "Failed to import main application",
-                        "primary_error": str(import_error),
-                        "primary_error_type": type(import_error).__name__,
-                        "fallback_error": str(e2),
-                        "fallback_error_type": type(e2).__name__,
-                        "python_dir": _python_dir,
-                        "python_dir_exists": os.path.exists(_python_dir),
-                        "script_dir": _script_dir,
-                        "current_dir": os.getcwd(),
-                        "sys_path": sys.path[:10],
-                        "traceback": error_traceback
-                    }
-                
-                # Also add a catch-all route
-                @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
-                def catch_all(path: str):
-                    return {
-                        "error": "Failed to import main application",
-                        "path": path,
-                        "primary_error": str(import_error),
-                        "traceback": error_traceback
-                    }
-                
-            except Exception as fastapi_error:
-                # Even FastAPI import failed - this is very bad
-                # Create a minimal WSGI-compatible app
-                def app(environ, start_response):
-                    status = '500 Internal Server Error'
-                    headers = [('Content-type', 'application/json')]
-                    error_msg = {
-                        "error": "Critical: All imports failed",
-                        "primary_error": str(import_error),
-                        "fastapi_error": str(fastapi_error),
-                        "python_dir": _python_dir
-                    }
-                    import json
-                    body = json.dumps(error_msg).encode('utf-8')
-                    start_response(status, headers)
-                    return [body]
+                # Strategy 4: Try importing ai.main using importlib with proper package setup
+                try:
+                    ai_main_path = os.path.join(_python_dir, "ai", "main.py")
+                    ai_init_path = os.path.join(_python_dir, "ai", "__init__.py")
+                    if os.path.exists(ai_main_path):
+                        # First, set up the ai package if it doesn't exist
+                        if 'ai' not in sys.modules:
+                            # Create ai package
+                            ai_pkg = type(sys)('ai')
+                            ai_pkg.__path__ = [os.path.join(_python_dir, "ai")]
+                            sys.modules['ai'] = ai_pkg
+                        
+                        # Now load ai.main
+                        spec = importlib.util.spec_from_file_location("ai.main", ai_main_path)
+                        if spec and spec.loader:
+                            ai_main_module = importlib.util.module_from_spec(spec)
+                            sys.modules['ai.main'] = ai_main_module
+                            spec.loader.exec_module(ai_main_module)
+                            app = ai_main_module.app
+                            _import_errors.append("SUCCESS: Imported ai.main via importlib")
+                        else:
+                            raise ImportError("Could not create module spec for ai.main")
+                    else:
+                        raise ImportError(f"ai/main.py not found at {ai_main_path}")
+                except BaseException as e4:
+                    _import_errors.append(f"ai.main importlib import failed: {type(e4).__name__}: {str(e4)}")
+                    
+                    # All strategies failed - create error app
+                    app = _create_error_app(
+                        "Failed to import main application",
+                        type(e).__name__,
+                        error_tb,
+                        {
+                            "primary_error": str(e),
+                            "all_import_attempts": _import_errors,
+                            "files_checked": {
+                                "ai_main.py": os.path.exists(os.path.join(_python_dir, "ai_main.py")),
+                                "ai/main.py": os.path.exists(os.path.join(_python_dir, "ai", "main.py")),
+                                "python_dir": os.path.exists(_python_dir)
+                            }
+                        }
+                    )
+
+# Ensure app is defined and valid
+if app is None:
+    app = _create_error_app(
+        "Critical: App is None after all import attempts",
+        "AppNotDefined",
+        additional_info={"import_attempts": _import_errors}
+    )
+else:
+    # Verify app is a valid FastAPI app
+    try:
+        # Check if app has the expected FastAPI attributes
+        if not hasattr(app, 'router') and not hasattr(app, '__call__'):
+            # App might not be a valid FastAPI app
+            app = _create_error_app(
+                "App imported but not a valid FastAPI application",
+                "InvalidApp",
+                additional_info={
+                    "app_type": str(type(app)),
+                    "app_attrs": [attr for attr in dir(app) if not attr.startswith('_')][:10],
+                    "import_attempts": _import_errors
+                }
+            )
+    except Exception as e:
+        # If checking app fails, create error app
+        app = _create_error_app(
+            f"Error validating app: {e}",
+            "AppValidationError",
+            additional_info={"import_attempts": _import_errors}
+        )
 
 __all__ = ["app"]
 PYCODE
