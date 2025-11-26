@@ -2,12 +2,14 @@
 Ollama LLM Service
 Handles communication with local Ollama server for Qwen 2.5 7B
 """
+
 import time
 from typing import List, Dict, Optional, AsyncGenerator
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 from config import settings
-from utils import logger, log_llm_call, OllamaServiceError
+from utils.exceptions import OllamaServiceError
+from utils.logging import logger, log_llm_call
 
 
 class OllamaService:
