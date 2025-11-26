@@ -134,121 +134,53 @@ find "$PYTHON_DIR/backend/documents/investment_schemes" -name "*.pdf" ! -name "p
 
 echo "📝 Creating serverless function entrypoint..."
 cat > "$FUNCTION_DIR/index.py" <<'PYCODE'
+"""
+Vercel serverless function entrypoint for AI Backend
+This file is executed when Vercel invokes the function.
+"""
 import os
 import sys
-import traceback
 
-# Ensure errors are always logged, even if something goes wrong
-def safe_log(msg):
-    """Safely log a message, ensuring it's always visible"""
-    try:
-        msg_str = str(msg)
-        # Write to both stderr and stdout
-        sys.stderr.write(f"[ENTRYPOINT] {msg_str}\n")
-        sys.stderr.flush()
-        sys.stdout.write(f"[ENTRYPOINT] {msg_str}\n")
-        sys.stdout.flush()
-    except:
-        # If even logging fails, try basic print
-        try:
-            print(f"[ENTRYPOINT] {msg}", flush=True)
-        except:
-            pass
+# CRITICAL: Add python directory to sys.path FIRST, before any imports
+# This directory contains all dependencies and our application code
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+_python_dir = os.path.join(_script_dir, "python")
+if os.path.exists(_python_dir) and _python_dir not in sys.path:
+    sys.path.insert(0, _python_dir)
 
-# Log immediately - this should always work
-safe_log("=== ENTRYPOINT STARTING ===")
+# Now import the app - this should work because python_dir is in sys.path
+# The app is at python/ai/main.py, so we import from ai.main
 try:
-    safe_log(f"Python version: {sys.version}")
-    safe_log(f"Python executable: {sys.executable}")
-    safe_log(f"Current directory: {os.getcwd()}")
-    safe_log(f"__file__: {__file__}")
-except Exception as e:
-    safe_log(f"Error logging initial info: {e}")
-
-try:
-    # Add python directory to path (contains all dependencies and code)
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    python_dir = os.path.join(script_dir, "python")
-    python_dir = os.path.abspath(python_dir)
-    
-    safe_log(f"Script dir: {script_dir}")
-    safe_log(f"Python dir: {python_dir}")
-    safe_log(f"Python dir exists: {os.path.exists(python_dir)}")
-    
-    if python_dir not in sys.path:
-        sys.path.insert(0, python_dir)
-        safe_log(f"Added {python_dir} to sys.path")
-    
-    safe_log(f"sys.path[0]: {sys.path[0]}")
-    safe_log(f"sys.path length: {len(sys.path)}")
-    
-    if os.path.exists(python_dir):
-        try:
-            contents = os.listdir(python_dir)[:15]
-            safe_log(f"Contents of python_dir: {contents}")
-        except Exception as e:
-            safe_log(f"Could not list python_dir: {e}")
-            safe_log(traceback.format_exc())
-    
-    # Check if ai directory exists
-    ai_dir = os.path.join(python_dir, "ai")
-    safe_log(f"AI dir: {ai_dir}")
-    safe_log(f"AI dir exists: {os.path.exists(ai_dir)}")
-    if os.path.exists(ai_dir):
-        try:
-            contents = os.listdir(ai_dir)[:15]
-            safe_log(f"Contents of ai dir: {contents}")
-        except Exception as e:
-            safe_log(f"Could not list ai_dir: {e}")
-            safe_log(traceback.format_exc())
-    
-    # Check if config.py exists
-    config_file = os.path.join(ai_dir, "config.py")
-    safe_log(f"Config file: {config_file}")
-    safe_log(f"Config file exists: {os.path.exists(config_file)}")
-    
-    # Import app directly from ai.main
-    # ai/main.py is at python/ai/main.py, backend is at python/backend/
-    safe_log("=== Attempting to import from ai.main ===")
-    
-    # Try importing config first to see if that's the issue
-    try:
-        safe_log("Testing config import...")
-        from ai import config
-        safe_log(f"Config imported successfully")
-        safe_log(f"Config settings exists: {hasattr(config, 'settings')}")
-        if hasattr(config, 'settings'):
-            safe_log(f"Settings type: {type(config.settings)}")
-    except Exception as config_error:
-        safe_log(f"Config import failed: {config_error}")
-        safe_log(f"Config error type: {type(config_error).__name__}")
-        safe_log(f"Config traceback:\n{traceback.format_exc()}")
-        raise
-    
-    # Now try importing main
-    safe_log("Importing ai.main...")
     from ai.main import app
-    safe_log("=== Successfully imported app from ai.main ===")
-    safe_log(f"App type: {type(app)}")
-    
 except Exception as e:
-    # Log the full error for debugging
-    error_msg = f"=== IMPORT FAILED ===\nError: {e}\nType: {type(e).__name__}\nTraceback:\n{traceback.format_exc()}"
-    safe_log(error_msg)
-    
-    # Try fallback to ai_main
+    # If ai.main fails, try ai_main as fallback
     try:
-        safe_log("=== Attempting fallback import from ai_main ===")
         from ai_main import app
-        safe_log("=== Successfully imported app from ai_main ===")
-    except Exception as e2:
-        fallback_msg = f"Fallback import also failed: {e2}\nType: {type(e2).__name__}\nTraceback:\n{traceback.format_exc()}"
-        safe_log(fallback_msg)
-        # Re-raise the original error with more context
-        raise RuntimeError(f"Failed to import app: {e}") from e
+    except Exception:
+        # Last resort: try to create a minimal error app
+        # But only if FastAPI is available (it should be since we installed it)
+        try:
+            from fastapi import FastAPI
+            app = FastAPI()
+            
+            @app.get("/")
+            def error():
+                import traceback
+                return {
+                    "error": "Failed to import main application",
+                    "message": str(e),
+                    "error_type": type(e).__name__,
+                    "python_dir": _python_dir,
+                    "python_dir_exists": os.path.exists(_python_dir),
+                    "sys_path": sys.path[:5],  # First 5 entries
+                    "traceback": traceback.format_exc()
+                }
+        except Exception as fastapi_error:
+            # If even FastAPI import fails, we're in serious trouble
+            # Just raise the original error
+            raise ImportError(f"Failed to import app: {e}") from e
 
-safe_log("=== ENTRYPOINT COMPLETE ===")
-__all__ = ("app",)
+__all__ = ["app"]
 PYCODE
 
 echo "⚙️ Writing function runtime config..."
