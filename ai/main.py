@@ -209,7 +209,10 @@ app.add_middleware(
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Log validation errors for debugging"""
-    logger.error("validation_error", errors=exc.errors(), body=exc.body)
+    try:
+        logger.error("validation_error", errors=exc.errors(), body=exc.body)
+    except:
+        pass  # Logger might not be available
     return JSONResponse(
         status_code=422,
         content={"detail": exc.errors(), "body": exc.body},
@@ -222,23 +225,29 @@ async def log_requests(request: Request, call_next):
     """Log all requests"""
     start_time = datetime.now()
     
-    logger.info(
-        "request_received",
-        method=request.method,
-        path=request.url.path,
-        client=request.client.host if request.client else "unknown"
-    )
+    try:
+        logger.info(
+            "request_received",
+            method=request.method,
+            path=request.url.path,
+            client=request.client.host if request.client else "unknown"
+        )
+    except:
+        pass  # Logger might not be available
     
     response = await call_next(request)
     
     duration = (datetime.now() - start_time).total_seconds()
-    logger.info(
-        "request_completed",
-        method=request.method,
-        path=request.url.path,
-        status_code=response.status_code,
-        duration_seconds=duration
-    )
+    try:
+        logger.info(
+            "request_completed",
+            method=request.method,
+            path=request.url.path,
+            status_code=response.status_code,
+            duration_seconds=duration
+        )
+    except:
+        pass  # Logger might not be available
     
     return response
 
