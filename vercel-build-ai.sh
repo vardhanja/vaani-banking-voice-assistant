@@ -136,69 +136,38 @@ echo "📝 Creating serverless function entrypoint..."
 cat > "$FUNCTION_DIR/index.py" <<'PYCODE'
 """
 Vercel serverless function entrypoint for AI Backend
+Minimal approach - create app first, then try to import
 """
 import os
 import sys
-import traceback
 
-# Add python directory to path FIRST
+# Create minimal app FIRST before any imports
+from fastapi import FastAPI
+app = FastAPI(title="AI Backend")
+
+# Add python directory to path
 python_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "python")
 if python_dir not in sys.path:
     sys.path.insert(0, python_dir)
 
-# Try to import app with comprehensive error handling
-app = None
-import_error = None
-
+# Try to import the real app
 try:
-    # Try direct import first
-    from ai.main import app
-except Exception as e:
-    import_error = e
-    error_traceback = traceback.format_exc()
-    
-    # Try via ai_main.py
-    try:
-        from ai_main import app
-        import_error = None  # Success
-    except Exception as e2:
-        # Both failed - create error app
-        try:
-            from fastapi import FastAPI
-            app = FastAPI(title="AI Backend - Import Error")
-            
-            @app.get("/")
-            @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
-            def error_handler(path: str = ""):
-                return {
-                    "error": "Failed to import application",
-                    "primary_error": str(import_error),
-                    "fallback_error": str(e2),
-                    "traceback": error_traceback,
-                    "python_dir": python_dir,
-                    "python_dir_exists": os.path.exists(python_dir),
-                    "sys_path": sys.path[:5]
-                }
-        except Exception as e3:
-            # Even FastAPI failed - create minimal WSGI app
-            def app(environ, start_response):
-                status = '500 Internal Server Error'
-                headers = [('Content-type', 'application/json')]
-                import json
-                body = json.dumps({
-                    "error": "Critical: All imports failed",
-                    "errors": [str(import_error), str(e2), str(e3)]
-                }).encode('utf-8')
-                start_response(status, headers)
-                return [body]
-
-# Ensure app exists
-if app is None:
-    from fastapi import FastAPI
-    app = FastAPI()
+    from ai.main import app as real_app
+    # Replace our minimal app with the real one
+    app = real_app
+except Exception:
+    # If import fails, keep the minimal app and add error endpoint
     @app.get("/")
-    def error():
-        return {"error": "App is None"}
+    @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+    def error_handler(path: str = ""):
+        import traceback
+        return {
+            "error": "Failed to import main application",
+            "path": path,
+            "python_dir": python_dir,
+            "python_dir_exists": os.path.exists(python_dir),
+            "traceback": traceback.format_exc()
+        }
 
 __all__ = ["app"]
 PYCODE

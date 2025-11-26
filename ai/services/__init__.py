@@ -7,7 +7,13 @@ except ImportError:
     get_ollama_service = None
     OllamaService = None
 
-from .openai_service import get_openai_service, OpenAIService
+# OpenAI service - wrap in try/except
+try:
+    from .openai_service import get_openai_service, OpenAIService
+except Exception:
+    # OpenAI service not available
+    get_openai_service = None
+    OpenAIService = None
 
 # Web TTS (gTTS) - conditional import
 try:
@@ -25,8 +31,24 @@ except ImportError:
     get_azure_tts_service = None
     AzureTTSService = None
 
-from .llm_service import get_llm_service, LLMService, LLMProvider
-from .guardrail_service import get_guardrail_service, GuardrailService, GuardrailViolationType, GuardrailResult
+# LLM service - wrap in try/except
+try:
+    from .llm_service import get_llm_service, LLMService, LLMProvider
+except Exception:
+    # LLM service not available
+    get_llm_service = None
+    LLMService = None
+    LLMProvider = None
+
+# Guardrail service - wrap in try/except
+try:
+    from .guardrail_service import get_guardrail_service, GuardrailService, GuardrailViolationType, GuardrailResult
+except Exception:
+    # Guardrail service not available
+    get_guardrail_service = None
+    GuardrailService = None
+    GuardrailViolationType = None
+    GuardrailResult = None
 
 __all__ = [
     "get_ollama_service",
