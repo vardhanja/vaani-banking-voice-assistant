@@ -135,10 +135,15 @@ echo "📝 Creating serverless function entrypoint..."
 cat > "$FUNCTION_DIR/index.py" <<'PYCODE'
 """
 Vercel serverless function entrypoint for AI Backend
+<<<<<<< HEAD
+=======
+All code wrapped in try/except to prevent any crashes
+>>>>>>> 5b93fa6 (fix: comprehensive AI backend Vercel deployment fixes)
 """
 import os
 import sys
 
+<<<<<<< HEAD
 # CRITICAL: Add python directory to path FIRST (before any imports)
 python_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "python")
 if python_dir not in sys.path:
@@ -205,6 +210,74 @@ if app is None:
             start_response('500 Internal Server Error', [('Content-type', 'application/json')])
             return [b'{"error":"Critical failure"}']
 
+=======
+# Wrap EVERYTHING in try/except to catch any possible error
+try:
+    # CRITICAL: Add python directory to path FIRST (before any imports)
+    python_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "python")
+    if python_dir not in sys.path:
+        sys.path.insert(0, python_dir)
+    
+    # Try importing the app
+    app = None
+    
+    # Strategy 1: Try ai_main.py (simpler path setup)
+    try:
+        from ai_main import app
+    except:
+        # Strategy 2: Try direct import
+        try:
+            from ai.main import app
+        except:
+            # Strategy 3: Create error app
+            try:
+                from fastapi import FastAPI
+                app = FastAPI(title="AI Backend - Import Error")
+                @app.get("/")
+                @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+                def error_handler(path: str = ""):
+                    import traceback
+                    return {
+                        "error": "Failed to import application",
+                        "path": path,
+                        "python_dir": python_dir,
+                        "python_dir_exists": os.path.exists(python_dir),
+                        "sys_path": sys.path[:5] if sys.path else []
+                    }
+            except:
+                # Strategy 4: Minimal WSGI app
+                def app(environ, start_response):
+                    start_response('500 Internal Server Error', [('Content-type', 'application/json')])
+                    return [b'{"error":"Import failed"}']
+    
+    # Ensure app exists
+    if app is None:
+        from fastapi import FastAPI
+        app = FastAPI()
+        @app.get("/")
+        def error():
+            return {"error": "App is None"}
+            
+except Exception as e:
+    # Ultimate fallback - create minimal app that always works
+    import traceback
+    try:
+        from fastapi import FastAPI
+        app = FastAPI(title="AI Backend - Critical Error")
+        @app.get("/")
+        @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+        def critical_error(path: str = ""):
+            return {
+                "error": "Critical initialization error",
+                "exception": str(e),
+                "traceback": traceback.format_exc()
+            }
+    except:
+        def app(environ, start_response):
+            start_response('500 Internal Server Error', [('Content-type', 'application/json')])
+            return [b'{"error":"Critical failure"}']
+
+>>>>>>> 5b93fa6 (fix: comprehensive AI backend Vercel deployment fixes)
 __all__ = ["app"]
 PYCODE
 
