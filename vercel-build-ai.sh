@@ -136,21 +136,18 @@ echo "📝 Creating serverless function entrypoint..."
 cat > "$FUNCTION_DIR/index.py" <<'PYCODE'
 """
 Vercel serverless function entrypoint for AI Backend
-Matches the simple approach used in ai_main.py
+Uses ai_main.py which handles the import correctly
 """
 import os
 import sys
-from pathlib import Path
 
 # Add python directory to path (where all our code is)
-# In Build Output API: index.py is at functions/api/index.func/
-# Python code is at functions/api/index.func/python/
 python_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "python")
 if python_dir not in sys.path:
     sys.path.insert(0, python_dir)
 
-# Import the app from ai.main (same as ai_main.py does)
-from ai.main import app
+# Import via ai_main.py (simpler and handles path setup)
+from ai_main import app
 
 __all__ = ["app"]
 PYCODE

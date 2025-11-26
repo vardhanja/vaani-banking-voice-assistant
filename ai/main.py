@@ -38,11 +38,54 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ConfigDict
 import uvicorn
 
-from config import settings
-from services import get_llm_service, get_web_tts_service, get_guardrail_service, GuardrailViolationType
-from agents.agent_graph import process_message
-from utils import logger
-from utils.demo_logging import demo_logger
+# Defensive imports - wrap in try/except to prevent import failures from crashing
+try:
+    from config import settings
+except Exception as e:
+    import logging
+    logging.error(f"Failed to import settings: {e}")
+    # Create minimal settings
+    from pydantic_settings import BaseSettings
+    class Settings(BaseSettings):
+        app_name: str = "Vaani Banking AI Assistant"
+        app_version: str = "1.0.0"
+        api_host: str = "0.0.0.0"
+        api_port: int = 8001
+        api_reload: bool = False
+    settings = Settings()
+
+try:
+    from services import get_llm_service, get_web_tts_service, get_guardrail_service, GuardrailViolationType
+except Exception as e:
+    import logging
+    logging.error(f"Failed to import services: {e}")
+    get_llm_service = None
+    get_web_tts_service = None
+    get_guardrail_service = None
+    GuardrailViolationType = None
+
+try:
+    from agents.agent_graph import process_message
+except Exception as e:
+    import logging
+    logging.error(f"Failed to import agent_graph: {e}")
+    async def process_message(*args, **kwargs):
+        return {"response": "Agent system unavailable", "intent": "error", "language": "en-IN"}
+
+try:
+    from utils import logger
+except Exception as e:
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    logger.error(f"Failed to import logger: {e}")
+
+try:
+    from utils.demo_logging import demo_logger
+except Exception as e:
+    import logging
+    demo_logger = logging.getLogger("demo")
+    demo_logger.warning(f"Demo logging unavailable: {e}")
 
 
 # Pydantic models for API
@@ -204,12 +247,17 @@ async def log_requests(request: Request, call_next):
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint"""
-    llm = get_llm_service()
+    llm_healthy = False
+    web_tts_available = False
     
-    llm_healthy = await llm.health_check()
+    if get_llm_service is not None:
+        try:
+            llm = get_llm_service()
+            llm_healthy = await llm.health_check()
+        except Exception:
+            pass
     
     # Check Web TTS availability (handle if not imported)
-    web_tts_available = False
     if get_web_tts_service is not None:
         try:
             web_tts = get_web_tts_service()
@@ -263,12 +311,16 @@ async def chat(request: ChatRequest):
             upi_mode=request.upi_mode  # Log UPI mode from request
         )
         
-        # Input Guardrails: Check user input before processing
-        guardrail_service = get_guardrail_service()
-        input_check = await guardrail_service.check_input(
-                language=request.language,
-                timestamp=datetime.now().isoformat()
-            )
+        # Input Guardrails: Check user input before processing (if available)
+        if get_guardrail_service is not None:
+            try:
+                guardrail_service = get_guardrail_service()
+                input_check = await guardrail_service.check_input(
+                    language=request.language,
+                    timestamp=datetime.now().isoformat()
+                )
+            except Exception:
+                pass  # Continue without guardrails if they fail
         
         # Convert message history
         history = []
@@ -289,32 +341,37 @@ async def chat(request: ChatRequest):
             upi_mode=request.upi_mode  # Pass UPI mode from frontend
         )
         
-        # Output Guardrails: Check AI response before sending
-        # Pass intent to allow guardrail to skip language check for language_change
-        output_check = await guardrail_service.check_output(
-            response=result.get("response", ""),
-            language=result.get("language", request.language),  # Use updated language from result
-            original_query=request.message,
-            intent=result.get("intent")  # Pass intent to skip language check for language_change
-        )
-        
-        if not output_check.passed:
-            # Log guardrail violation
-            logger.warning(
-                "guardrail_violation_output",
-                user_id=request.user_id,
-                violation_type=output_check.violation_type,
-                language=request.language,
-                response_preview=result.get("response", "")[:100]
-            )
-            
-            # Replace with safe fallback message
-            if request.language == "hi-IN":
-                fallback_message = "मुझे खेद है, मुझे आपकी मदद करने में समस्या हो रही है। कृपया पुनः प्रयास करें।"
-            else:
-                fallback_message = "I'm sorry, I'm having trouble helping you right now. Please try again."
-            
-            result["response"] = fallback_message
+        # Output Guardrails: Check AI response before sending (if available)
+        if get_guardrail_service is not None:
+            try:
+                guardrail_service = get_guardrail_service()
+                # Pass intent to allow guardrail to skip language check for language_change
+                output_check = await guardrail_service.check_output(
+                    response=result.get("response", ""),
+                    language=result.get("language", request.language),  # Use updated language from result
+                    original_query=request.message,
+                    intent=result.get("intent")  # Pass intent to skip language check for language_change
+                )
+                
+                if not output_check.passed:
+                    # Log guardrail violation
+                    logger.warning(
+                        "guardrail_violation_output",
+                        user_id=request.user_id,
+                        violation_type=output_check.violation_type,
+                        language=request.language,
+                        response_preview=result.get("response", "")[:100]
+                    )
+                    
+                    # Replace with safe fallback message
+                    if request.language == "hi-IN":
+                        fallback_message = "मुझे खेद है, मुझे आपकी मदद करने में समस्या हो रही है। कृपया पुनः प्रयास करें।"
+                    else:
+                        fallback_message = "I'm sorry, I'm having trouble helping you right now. Please try again."
+                    
+                    result["response"] = fallback_message
+            except Exception:
+                pass  # Continue without guardrails if they fail
         
         # Demo logging: AI response
         demo_logger.ai_response(
