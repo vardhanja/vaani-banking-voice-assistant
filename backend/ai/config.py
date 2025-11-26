@@ -128,7 +128,7 @@ settings = get_settings()
 def _sync_langsmith_env_vars() -> None:
     """Ensure LangSmith/LangChain env vars are available for downstream libraries.
 
-    We load configuration via Pydantic (which reads ai/.env) but LangChain expects
+    We load configuration via Pydantic (which reads backend/ai/.env) but LangChain expects
     environment variables like LANGCHAIN_TRACING_V2 to be present in os.environ.
     Without this bridge, LangSmith never sees our tracing config when the app is
     launched via python main.py (because .env isn't automatically exported).
