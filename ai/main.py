@@ -195,14 +195,31 @@ def _build_allowed_origins() -> List[str]:
     return merged
 
 
-# Add CORS middleware
+# Add CORS middleware with explicit OPTIONS support
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_build_allowed_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
+
+# Explicit OPTIONS handler as fallback - always return 200 for preflight
+@app.options("/{path:path}")
+async def options_handler(request: Request, path: str = ""):
+    """Handle OPTIONS preflight requests - always return 200 with CORS headers"""
+    origin = request.headers.get("origin", "*")
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": origin if origin in _build_allowed_origins() or "*" in _build_allowed_origins() else "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+            "Access-Control-Allow-Headers": request.headers.get("access-control-request-headers", "*"),
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Max-Age": "600",
+        }
+    )
 
 
 # Exception handler for validation errors

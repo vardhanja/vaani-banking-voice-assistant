@@ -135,82 +135,11 @@ echo "📝 Creating serverless function entrypoint..."
 cat > "$FUNCTION_DIR/index.py" <<'PYCODE'
 """
 Vercel serverless function entrypoint for AI Backend
-<<<<<<< HEAD
-=======
 All code wrapped in try/except to prevent any crashes
->>>>>>> 5b93fa6 (fix: comprehensive AI backend Vercel deployment fixes)
 """
 import os
 import sys
 
-<<<<<<< HEAD
-# CRITICAL: Add python directory to path FIRST (before any imports)
-python_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "python")
-if python_dir not in sys.path:
-    sys.path.insert(0, python_dir)
-
-# Wrap everything in try/except to catch ALL exceptions including SystemExit
-app = None
-import_error = None
-
-try:
-    # Try importing via ai_main first
-    from ai_main import app
-except (ImportError, Exception, SystemExit, KeyboardInterrupt) as e:
-    import_error = e
-    import traceback
-    error_tb = traceback.format_exc()
-    
-    # Fallback: try direct import
-    try:
-        from ai.main import app
-        import_error = None  # Success
-    except (ImportError, Exception, SystemExit, KeyboardInterrupt) as e2:
-        # Both failed - create error app
-        try:
-            from fastapi import FastAPI
-            app = FastAPI(title="AI Backend - Import Error")
-            
-            @app.get("/")
-            @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
-            def error_handler(path: str = ""):
-                return {
-                    "error": "Failed to import application",
-                    "primary_error": str(import_error) if import_error else None,
-                    "fallback_error": str(e2),
-                    "path": path,
-                    "python_dir": python_dir,
-                    "python_dir_exists": os.path.exists(python_dir),
-                    "sys_path": sys.path[:5] if sys.path else [],
-                    "traceback": error_tb
-                }
-        except Exception as e3:
-            # Even FastAPI failed - create minimal WSGI app
-            def app(environ, start_response):
-                status = '500 Internal Server Error'
-                headers = [('Content-type', 'application/json')]
-                import json
-                body = json.dumps({
-                    "error": "Critical: All imports failed",
-                    "errors": [str(import_error) if import_error else None, str(e2), str(e3)]
-                }).encode('utf-8')
-                start_response(status, headers)
-                return [body]
-
-# Ensure app exists
-if app is None:
-    try:
-        from fastapi import FastAPI
-        app = FastAPI()
-        @app.get("/")
-        def error():
-            return {"error": "App is None after all import attempts"}
-    except:
-        def app(environ, start_response):
-            start_response('500 Internal Server Error', [('Content-type', 'application/json')])
-            return [b'{"error":"Critical failure"}']
-
-=======
 # Wrap EVERYTHING in try/except to catch any possible error
 try:
     # CRITICAL: Add python directory to path FIRST (before any imports)
@@ -224,15 +153,27 @@ try:
     # Strategy 1: Try ai_main.py (simpler path setup)
     try:
         from ai_main import app
-    except:
+    except Exception as e1:
         # Strategy 2: Try direct import
         try:
             from ai.main import app
-        except:
-            # Strategy 3: Create error app
+        except Exception as e2:
+            # Strategy 3: Create error app with CORS support
             try:
                 from fastapi import FastAPI
+                from fastapi.middleware.cors import CORSMiddleware
                 app = FastAPI(title="AI Backend - Import Error")
+                
+                # Add CORS middleware even for error app
+                app.add_middleware(
+                    CORSMiddleware,
+                    allow_origins=["*"],
+                    allow_credentials=True,
+                    allow_methods=["*"],
+                    allow_headers=["*"],
+                )
+                
+                @app.options("/{path:path}")
                 @app.get("/")
                 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
                 def error_handler(path: str = ""):
@@ -242,28 +183,91 @@ try:
                         "path": path,
                         "python_dir": python_dir,
                         "python_dir_exists": os.path.exists(python_dir),
-                        "sys_path": sys.path[:5] if sys.path else []
+                        "sys_path": sys.path[:5] if sys.path else [],
+                        "import_error_1": str(e1) if 'e1' in locals() else None,
+                        "import_error_2": str(e2) if 'e2' in locals() else None
                     }
-            except:
-                # Strategy 4: Minimal WSGI app
+            except Exception as e3:
+                # Strategy 4: Minimal WSGI app with CORS headers
                 def app(environ, start_response):
-                    start_response('500 Internal Server Error', [('Content-type', 'application/json')])
-                    return [b'{"error":"Import failed"}']
+                    if environ['REQUEST_METHOD'] == 'OPTIONS':
+                        # Handle preflight requests
+                        headers = [
+                            ('Access-Control-Allow-Origin', '*'),
+                            ('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS'),
+                            ('Access-Control-Allow-Headers', '*'),
+                            ('Access-Control-Allow-Credentials', 'true'),
+                            ('Content-Length', '0')
+                        ]
+                        start_response('200 OK', headers)
+                        return [b'']
+                    else:
+                        status = '500 Internal Server Error'
+                        headers = [
+                            ('Content-type', 'application/json'),
+                            ('Access-Control-Allow-Origin', '*'),
+                            ('Access-Control-Allow-Methods', '*'),
+                            ('Access-Control-Allow-Headers', '*')
+                        ]
+                        import json
+                        body = json.dumps({
+                            "error": "Import failed",
+                            "errors": [str(e1) if 'e1' in locals() else None, str(e2) if 'e2' in locals() else None, str(e3)]
+                        }).encode('utf-8')
+                        start_response(status, headers)
+                        return [body]
     
-    # Ensure app exists
+    # Ensure app exists and add explicit OPTIONS handler
     if app is None:
         from fastapi import FastAPI
+        from fastapi.middleware.cors import CORSMiddleware
         app = FastAPI()
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
         @app.get("/")
         def error():
             return {"error": "App is None"}
+    else:
+        # Ensure CORS is configured on the real app
+        try:
+            from fastapi.middleware.cors import CORSMiddleware
+            # Check if CORS middleware already exists
+            has_cors = any(
+                isinstance(middleware, CORSMiddleware) or 
+                (hasattr(middleware, 'cls') and middleware.cls == CORSMiddleware)
+                for middleware in getattr(app, 'user_middleware', [])
+            )
+            if not has_cors:
+                app.add_middleware(
+                    CORSMiddleware,
+                    allow_origins=["*"],
+                    allow_credentials=True,
+                    allow_methods=["*"],
+                    allow_headers=["*"],
+                )
+        except:
+            pass  # CORS already configured or can't configure
             
 except Exception as e:
-    # Ultimate fallback - create minimal app that always works
+    # Ultimate fallback - create minimal app that always works with CORS
     import traceback
     try:
         from fastapi import FastAPI
+        from fastapi.middleware.cors import CORSMiddleware
         app = FastAPI(title="AI Backend - Critical Error")
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+        @app.options("/{path:path}")
         @app.get("/")
         @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
         def critical_error(path: str = ""):
@@ -274,10 +278,23 @@ except Exception as e:
             }
     except:
         def app(environ, start_response):
-            start_response('500 Internal Server Error', [('Content-type', 'application/json')])
-            return [b'{"error":"Critical failure"}']
+            if environ['REQUEST_METHOD'] == 'OPTIONS':
+                headers = [
+                    ('Access-Control-Allow-Origin', '*'),
+                    ('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS'),
+                    ('Access-Control-Allow-Headers', '*'),
+                    ('Access-Control-Allow-Credentials', 'true'),
+                    ('Content-Length', '0')
+                ]
+                start_response('200 OK', headers)
+                return [b'']
+            else:
+                start_response('500 Internal Server Error', [
+                    ('Content-type', 'application/json'),
+                    ('Access-Control-Allow-Origin', '*')
+                ])
+                return [b'{"error":"Critical failure"}']
 
->>>>>>> 5b93fa6 (fix: comprehensive AI backend Vercel deployment fixes)
 __all__ = ["app"]
 PYCODE
 
