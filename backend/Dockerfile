@@ -26,4 +26,4 @@ EXPOSE 5000
 
 # Run the web process using the Procfile command
 # The entry point command must be the same as your Procfile
-CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:5000", "app:app"]
+CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:5000", "backend.app:app"]
