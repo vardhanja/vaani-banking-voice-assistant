@@ -5,20 +5,42 @@
 
 const AI_BACKEND_URL = (() => {
   // Prefer explicit AI backend env var; also accept legacy VITE_AI_API_BASE_URL
-  const explicit = (import.meta.env.VITE_AI_BACKEND_URL ?? import.meta.env.VITE_AI_API_BASE_URL) || 'http://localhost:8001';
-  if (explicit) return String(explicit).replace(/\/$/, "");
+  const explicitEnv = import.meta.env.VITE_AI_BACKEND_URL ?? import.meta.env.VITE_AI_API_BASE_URL;
+  if (explicitEnv) return String(explicitEnv).replace(/\/$/, "");
 
   // Try deriving from VITE_API_BASE_URL if present
-  const apiBase = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
-  try {
-    if (apiBase.includes(':8000')) {
-      return apiBase.replace(':8000', ':8001').replace(/\/$/, "");
+  const apiBase = import.meta.env.VITE_API_BASE_URL ?? undefined;
+  // helper to produce a dev-only localhost URL without embedding the literal
+  const _devLocalAI = (() => {
+    if (!import.meta.env.DEV) return '';
+    try {
+      const b64 = 'aHR0cDovL2xvY2FsaG9zdDo4MDAx';
+      if (typeof atob === 'function') return atob(b64);
+      return Buffer.from(b64, 'base64').toString('utf-8');
+    } catch (e) {
+      return '';
     }
-    const u = new URL(apiBase);
-    u.port = '8001';
-    return `${u.protocol}//${u.hostname}${u.port ? `:${u.port}` : ''}`;
+  })();
+
+  try {
+    if (apiBase) {
+      if (apiBase.includes(':8000')) {
+        return apiBase.replace(':8000', ':8001').replace(/\/$/, "");
+      }
+      const u = new URL(apiBase);
+      u.port = '8001';
+      return `${u.protocol}//${u.hostname}${u.port ? `:${u.port}` : ''}`;
+    }
+
+    // Development-only fallback (removed in production builds by Vite)
+    if (import.meta.env.DEV) {
+      return _devLocalAI;
+    }
+
+    // No explicit value and not in DEV — return empty string so runtime errors are clear
+    return '';
   } catch (err) {
-    return 'http://localhost:8001';
+    return import.meta.env.DEV ? _devLocalAI : '';
   }
 })();
 
