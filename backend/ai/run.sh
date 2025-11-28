@@ -16,22 +16,102 @@ echo "📡 LLM Provider: ${LLM_PROVIDER}"
 
 # Only check Ollama if using it as provider
 if [ "${LLM_PROVIDER}" = "ollama" ]; then
-    # Check if Ollama is running
-    if ! curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-        echo "❌ Ollama is not running. Please start it first with: ollama serve"
-        exit 1
+    DOKKU_HOST_IP=""
+    if [ -f /proc/net/route ]; then
+        DOKKU_HOST_IP=$(awk '($1 == "00000000" && $3 != "00000000") {
+            hex = $3
+            a = "0x" substr(hex, 7, 2)
+            b = "0x" substr(hex, 5, 2)
+            c = "0x" substr(hex, 3, 2)
+            d = "0x" substr(hex, 1, 2)
+            printf "%d.%d.%d.%d\n", a, b, c, d
+        }' /proc/net/route)
     fi
+
+    # Also set OLLAMA_HOST for the ollama CLI tool, prioritizing existing env var, then discovered IP, then localhost.
+    export OLLAMA_HOST=${OLLAMA_HOST:-${DOKKU_HOST_IP:-127.0.0.1}}
     
-    echo "✅ Ollama is running"
-    
-    # Check if models are available
-    if ! /usr/local/bin/ollama list | grep -q "qwen2.5:7b"; then
-        echo "⚠️  Model qwen2.5:7b not found. Download it with:"
-        echo "   /usr/local/bin/ollama pull qwen2.5:7b"
-        exit 1
+    # Prefer a configured OLLAMA_BASE_URL, fall back to discovered host IP, then finally localhost.
+    OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://${DOKKU_HOST_IP:-127.0.0.1}:11434}
+    echo "📡 Checking Ollama at ${OLLAMA_BASE_URL}"
+
+    ok=2
+    # Try Python (available in most images you use via dokku run); fall back to curl if present.
+    if command -v python3 >/dev/null 2>&1; then
+        python3 - <<'PY' "${OLLAMA_BASE_URL}"
+import sys, urllib.request
+url = sys.argv[1].rstrip('/') + "/api/tags"
+try:
+    urllib.request.urlopen(url, timeout=3)
+    sys.exit(0)
+except Exception:
+    sys.exit(1)
+PY
+        ok=$?
+    elif command -v curl >/dev/null 2>&1; then
+        curl -fsS "${OLLAMA_BASE_URL}/api/tags" >/dev/null 2>&1
+        ok=$?
+    else
+        # Neither python3 nor curl present; leave ok=2 to indicate unknown
+        ok=2
     fi
-    
-    echo "✅ Models available"
+
+    if [ "$ok" -eq 0 ]; then
+        echo "✅ Ollama reachable at ${OLLAMA_BASE_URL}"
+    else
+        echo "⚠️ Ollama not reachable at ${OLLAMA_BASE_URL}"
+        if [ "${STRICT_OLLAMA_CHECK:-0}" = "1" ]; then
+            echo "Exiting because STRICT_OLLAMA_CHECK=1"
+            exit 1
+        else
+            echo "Continuing startup without Ollama (runtime calls may fail)"
+        fi
+    fi
+
+    # prefer explicit OLLAMA_CLI, otherwise detect from PATH
+    OLLAMA_CLI=${OLLAMA_CLI:-$(command -v ollama || true)}
+    if [ -n "$OLLAMA_CLI" ] && [ -x "$OLLAMA_CLI" ]; then
+        OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b}
+        if ! "$OLLAMA_CLI" list 2>/dev/null | grep -q "$OLLAMA_MODEL"; then
+            echo "⚠️ Model ${OLLAMA_MODEL} not found. To pull: $OLLAMA_CLI pull ${OLLAMA_MODEL}"
+            if [ "${STRICT_OLLAMA_CHECK:-0}" = "1" ]; then
+                echo "Exiting because STRICT_OLLAMA_CHECK=1 and model missing"
+                exit 1
+            else
+                echo "Continuing without the model (development mode)"
+            fi
+        else
+            echo "✅ Models available (via ${OLLAMA_CLI})"
+        fi
+    else
+        echo "⚠️ ollama CLI not found; skipping model check."
+    fi
+
+    if [ "$ok" -eq 0 ]; then
+        echo "✅ Ollama reachable at ${OLLAMA_BASE_URL}"
+    else
+        echo "⚠️ Ollama not reachable at ${OLLAMA_BASE_URL}"
+        if [ "${STRICT_OLLAMA_CHECK:-0}" = "1" ]; then
+            echo "Exiting because STRICT_OLLAMA_CHECK=1"
+            exit 1
+        else
+            echo "Continuing startup without Ollama (runtime calls may fail)"
+        fi
+    fi
+
+    # prefer explicit OLLAMA_CLI, otherwise detect from PATH
+    OLLAMA_CLI=${OLLAMA_CLI:-$(command -v ollama || true)}
+    if [ -n "$OLLAMA_CLI" ] && [ -x "$OLLAMA_CLI" ]; then
+        if ! "$OLLAMA_CLI" list 2>/dev/null | grep -q "qwen2.5:7b"; then
+            echo "⚠️ Model qwen2.5:7b not found. To pull: $OLLAMA_CLI pull qwen2.5:7b"
+            [ "${STRICT_OLLAMA_CHECK:-0}" = "1" ] && exit 1 || true
+        else
+            echo "✅ Models available (via ollama CLI)"
+        fi
+    else
+        echo "⚠️ ollama CLI not found; skipping model check."
+    fi
+
 elif [ "${LLM_PROVIDER}" = "openai" ]; then
     # Check if OpenAI API key is set
     if ! grep -q "^OPENAI_API_KEY=sk-" .env 2>/dev/null; then
