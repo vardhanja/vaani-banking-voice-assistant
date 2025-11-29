@@ -96,6 +96,7 @@ const Login = ({ onAuthenticate, authenticated }) => {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isVerifyingVoice, setIsVerifyingVoice] = useState(false);
+  const [isValidatingPassword, setIsValidatingPassword] = useState(false);
   const [awaitingOtp, setAwaitingOtp] = useState(false);
   const [otp, setOtp] = useState("");
   const [showOtp, setShowOtp] = useState(false);
@@ -349,8 +350,8 @@ const Login = ({ onAuthenticate, authenticated }) => {
     }
   };
 
-  const credentialInputsDisabled = awaitingOtp || isSubmitting || isVerifyingVoice;
-  const otpToggleDisabled = isSubmitting || isVerifyingVoice;
+  const credentialInputsDisabled = awaitingOtp || isSubmitting || isVerifyingVoice || isValidatingPassword;
+  const otpToggleDisabled = isSubmitting || isVerifyingVoice || isValidatingPassword;
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -385,6 +386,8 @@ const Login = ({ onAuthenticate, authenticated }) => {
         validationPayload.voiceSampleBlob = voiceBlob;
         setIsVerifyingVoice(true);
         setRecordingStatus(strings.voiceLogin.recording.statusConfirmed); // Show confirmation message when verification starts
+      } else if (authMode === "password") {
+        setIsValidatingPassword(true);
       }
 
       try {
@@ -406,6 +409,8 @@ const Login = ({ onAuthenticate, authenticated }) => {
       } finally {
         if (authMode === "voice") {
           setIsVerifyingVoice(false);
+        } else if (authMode === "password") {
+          setIsValidatingPassword(false);
         }
       }
 
@@ -553,29 +558,39 @@ const Login = ({ onAuthenticate, authenticated }) => {
                 />
               </label>
               {authMode === "password" && (
-                <label htmlFor="password" className="input-with-toggle">
-                  {strings.general.passwordLabel}
-                  <div className="input-with-toggle__wrapper">
-                    <input
-                      id="password"
-                      name="password"
-                      type={showPassword ? "text" : "password"}
-                      autoComplete="current-password"
-                      placeholder={strings.general.passwordPlaceholder}
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                      disabled={credentialInputsDisabled}
-                    />
-                    <button
-                      type="button"
-                      className="input-with-toggle__btn"
-                      onClick={() => setShowPassword((prev) => !prev)}
-                      aria-label={showPassword ? strings.general.hidePassword : strings.general.showPassword}
-                    >
-                      {showPassword ? strings.general.hidePassword : strings.general.showPassword}
-                    </button>
-                  </div>
-                </label>
+                <>
+                  <label htmlFor="password" className="input-with-toggle">
+                    {strings.general.passwordLabel}
+                    <div className="input-with-toggle__wrapper">
+                      <input
+                        id="password"
+                        name="password"
+                        type={showPassword ? "text" : "password"}
+                        autoComplete="current-password"
+                        placeholder={strings.general.passwordPlaceholder}
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        disabled={credentialInputsDisabled}
+                      />
+                      <button
+                        type="button"
+                        className="input-with-toggle__btn"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        aria-label={showPassword ? strings.general.hidePassword : strings.general.showPassword}
+                      >
+                        {showPassword ? strings.general.hidePassword : strings.general.showPassword}
+                      </button>
+                    </div>
+                  </label>
+                  {isValidatingPassword && !awaitingOtp && (
+                    <div className="voice-verification-loader">
+                      <div className="loader-spinner"></div>
+                      <p className="voice-verification-message">
+                        {strings.general.verifying || "Verifying credentials..."}
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
               {authMode === "voice" && (
                 <div className="card-form__voice" ref={voiceSectionRef}>
@@ -676,12 +691,14 @@ const Login = ({ onAuthenticate, authenticated }) => {
               )}
               {error && <div className="form-error">{error}</div>}
               <div className="card-form__actions">
-                <button className="primary-btn" type="submit" disabled={isSubmitting || isVerifyingVoice}>
-                  {isVerifyingVoice 
-                    ? strings.general.verifyingVoice
-                    : awaitingOtp 
-                      ? (isSubmitting ? strings.general.verifying : strings.general.verifyOtpButton) 
-                      : strings.general.loginButton}
+                <button className="primary-btn" type="submit" disabled={isSubmitting || isVerifyingVoice || isValidatingPassword}>
+                  {isValidatingPassword
+                    ? (strings.general.verifying || "Verifying...")
+                    : isVerifyingVoice 
+                      ? strings.general.verifyingVoice
+                      : awaitingOtp 
+                        ? (isSubmitting ? strings.general.verifying : strings.general.verifyOtpButton) 
+                        : strings.general.loginButton}
                 </button>
                 {awaitingOtp && (
                   <button
