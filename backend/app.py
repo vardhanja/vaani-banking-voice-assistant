@@ -63,7 +63,8 @@ def create_app() -> FastAPI:
             "https://sunnationalbank.online",
             "https://api.sunnationalbank.online",
         ],
-        allow_origin_regex=r"^https://.*\.(sunnationalbank\.online|vercel\.app)$",
+        # Only allow our configured production domains; removed Vercel wildcard entries
+        allow_origin_regex=r"^https://.*\.(sunnationalbank\.online)$",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
