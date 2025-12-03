@@ -55,8 +55,10 @@ def main() -> None:
     shell_path = "/bin/zsh" if Path("/bin/zsh").exists() else "/bin/bash"
     _ensure_posix_shell(shell_path)
 
+    # Use uvicorn to run the backend app directly (previous `main.py` was
+    # removed as part of Vercel cleanup). This keeps local dev startup working.
     service_commands = [
-        ("Backend", "python main.py"),
+        ("Backend", "python -m uvicorn backend.app:app --reload --host 127.0.0.1 --port 8000"),
         ("AI", "cd backend/ai && ./run.sh"),
         ("Frontend", "cd frontend && npm run dev"),
     ]
