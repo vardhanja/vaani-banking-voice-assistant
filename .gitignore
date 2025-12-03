@@ -12,8 +12,7 @@ wheels/
 # Frontend build artifacts
 frontend/.vite/
 
-# AI backend environment
-ai/.env
+# Environment variable files
 backend/ai/.env
 
 # Log files
