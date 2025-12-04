@@ -11,6 +11,7 @@ import DeviceBinding from "./pages/DeviceBinding.jsx";
 import SignInHelp from "./pages/SignInHelp.jsx";
 import Beneficiaries from "./pages/Beneficiaries.jsx";
 import Chat from "./pages/Chat.jsx";
+import AIArchitecture from "./pages/AIArchitecture.jsx";
 import { authenticateUser } from "./api/client.js";
 
 const mockProfile = {
@@ -266,6 +267,21 @@ const App = () => {
       <Route
         path="/sign-in-help"
         element={<SignInHelp onBack={() => navigate(-1)} />}
+      />
+      {/* AI Architecture - Public Route for demos */}
+      <Route
+        path="/arch"
+        element={<AIArchitecture isPublic={true} />}
+      />
+      <Route
+        path="/architecture"
+        element={
+          session.authenticated ? (
+            <AIArchitecture session={session} onSignOut={signOut} />
+          ) : (
+            <Navigate to="/" replace />
+          )
+        }
       />
       <Route path="*" element={<Navigate to={session.authenticated ? "/profile" : "/"} replace />} />
     </Routes>

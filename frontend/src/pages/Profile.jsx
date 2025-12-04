@@ -1047,6 +1047,13 @@ const Profile = ({ user, accessToken, onSignOut, sessionDetail }) => {
                   >
                     {s.trustedDevices}
                   </button>
+                  <button
+                    type="button"
+                    className="secondary-btn secondary-btn--highlight"
+                    onClick={() => navigate("/architecture")}
+                  >
+                    🧠 AI Architecture
+                  </button>
                 </div>
               </article>
 

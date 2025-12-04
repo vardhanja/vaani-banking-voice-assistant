@@ -882,6 +882,18 @@
   box-shadow: none;
 }
 
+.secondary-btn--highlight {
+  background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+  border-color: #fb923c;
+  color: #c2410c;
+}
+
+.secondary-btn--highlight:hover:not(:disabled) {
+  background: linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%);
+  border-color: #f97316;
+  color: #9a3412;
+}
+
 .link-btn {
   border: none;
   background: none;
