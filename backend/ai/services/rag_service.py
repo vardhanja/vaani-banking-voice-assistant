@@ -104,8 +104,9 @@ class RAGService:
         # Vector store will be initialized when needed
         self.vectorstore = None
         self._context_cache: OrderedDict[str, Tuple[str, float]] = OrderedDict()
-        self._cache_max_size = 128
-        self._cache_ttl_seconds = 120
+        # Increased cache size and TTL for better performance
+        self._cache_max_size = 1024
+        self._cache_ttl_seconds = 300  # 5 minutes
         
     def load_pdf_documents(self) -> List[Document]:
         """

@@ -118,7 +118,19 @@ class Settings(BaseSettings):
 @lru_cache()
 def get_settings() -> Settings:
     """Get cached settings instance"""
-    return Settings()
+    _settings = Settings()
+    
+    # Security check: Warn if default JWT secret is used in production
+    if _settings.is_production and _settings.jwt_secret_key == "dev-secret-key-change-in-production":
+        import warnings
+        warnings.warn(
+            "SECURITY WARNING: Default JWT secret key is being used in production. "
+            "Set JWT_SECRET_KEY environment variable to a secure random value.",
+            UserWarning,
+            stacklevel=2
+        )
+    
+    return _settings
 
 
 # Export settings instance
