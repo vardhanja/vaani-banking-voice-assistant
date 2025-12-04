@@ -438,7 +438,7 @@ localhost:11434 (Ollama)
 ```
 
 **Considerations**:
-- Frontend: Static hosting (Vercel, Netlify, S3 + CloudFront)
+- Frontend: Static hosting (Netlify, S3 + CloudFront, or similar)
 - Backend API: Container deployment (Docker + Kubernetes)
 - AI Backend: GPU instances for Ollama or cloud LLM APIs
 - Database: PostgreSQL managed service (AWS RDS, Supabase)

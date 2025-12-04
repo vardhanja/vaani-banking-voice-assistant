@@ -1,5 +1,5 @@
 # Backend API Dependencies Only
-# Minimal requirements for backend deployment on Vercel
+# Minimal requirements for lightweight backend deployment (optimized for smaller builds)
 # Optimized to reduce memory usage during build
 
 # Core FastAPI and server
