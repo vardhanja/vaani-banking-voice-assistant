@@ -412,6 +412,39 @@
   margin-bottom: 0.75rem;
 }
 
+.card-hero__controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.ai-architecture-btn {
+  padding: 0.5rem 1rem;
+  background-color: transparent;
+  border: 2px solid #ff8f42;
+  border-radius: 0.375rem;
+  color: #ff8f42;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.ai-architecture-btn:hover {
+  background-color: #ff8f42;
+  color: white;
+}
+
+.ai-architecture-btn:active {
+  transform: scale(0.98);
+}
+
+.ai-architecture-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .card-hero h1 {
   margin: 0;
   font-size: clamp(1.875rem, 2.2vw, 2.5rem);

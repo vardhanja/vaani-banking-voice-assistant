@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import PropTypes from "prop-types";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 
 import SunHeader from "../components/SunHeader.jsx";
 import LanguageDropdown from "../components/LanguageDropdown.jsx";
@@ -79,6 +79,7 @@ const FIXED_OTP = "12345";
 const SUPPORTED_LOGIN_LANGUAGES = ["en-IN", "hi-IN"];
 
 const Login = ({ onAuthenticate, authenticated }) => {
+  const navigate = useNavigate();
   // Language state - default to user's preferred language or English
   const [loginLanguage, setLoginLanguage] = useState(() => {
     const preferred = getPreferredLanguage();
@@ -516,10 +517,20 @@ const Login = ({ onAuthenticate, authenticated }) => {
             <div className="card-hero">
               <div className="card-hero__header">
                 <h1>{strings.general.welcomeTitle}</h1>
-                <LanguageDropdown
-                  disabled={credentialInputsDisabled || recordingState === "recording"}
-                  onSelect={handleLanguageChange}
-                />
+                <div className="card-hero__controls">
+                  <button
+                    type="button"
+                    className="ai-architecture-btn"
+                    onClick={() => navigate("/arch")}
+                    title="View Architecture"
+                  >
+                    Architecture
+                  </button>
+                  <LanguageDropdown
+                    disabled={credentialInputsDisabled || recordingState === "recording"}
+                    onSelect={handleLanguageChange}
+                  />
+                </div>
               </div>
               <p className="card-hero__subtitle">{strings.general.welcomeSubtitle}</p>
             </div>
