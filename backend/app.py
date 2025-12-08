@@ -60,12 +60,9 @@ def create_app() -> FastAPI:
         allow_origins=[
             "http://localhost:5173",
             "http://127.0.0.1:5173",
-            "https://sunnationalbank.online",
-            "https://api.sunnationalbank.online",
-            "http://sunnationalbank.online",  # Allow HTTP for local testing
         ],
-        # Allow all subdomains of sunnationalbank.online
-        allow_origin_regex=r"^https?://.*\.sunnationalbank\.online$",
+        # Allow all domains and subdomains of sunnationalbank.online (both root and subdomains)
+        allow_origin_regex=r"^https?://([a-zA-Z0-9-]+\.)?sunnationalbank\.online$",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
