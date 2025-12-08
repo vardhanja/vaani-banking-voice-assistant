@@ -62,12 +62,14 @@ def create_app() -> FastAPI:
             "http://127.0.0.1:5173",
             "https://sunnationalbank.online",
             "https://api.sunnationalbank.online",
+            "http://sunnationalbank.online",  # Allow HTTP for local testing
         ],
-        # Only allow our configured production domains; removed Vercel wildcard entries
-        allow_origin_regex=r"^https://.*\.(sunnationalbank\.online)$",
+        # Allow all subdomains of sunnationalbank.online
+        allow_origin_regex=r"^https?://.*\.sunnationalbank\.online$",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["*"],
     )
     
     # Add demo logging middleware
