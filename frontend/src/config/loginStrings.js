@@ -42,6 +42,10 @@ export const LOGIN_STRINGS = {
       },
       errors: {
         noVoiceSample: "Please capture and confirm your voice sample before continuing. (If this is your first time enrolling for voice login, record the passphrase twice.)",
+        voiceMismatch: "Voice sample did not match our records.",
+        voiceMismatchHelp: "You can try logging in with your password instead, or reset your voice enrollment to record a new voice sample.",
+        switchToPassword: "Switch to Password Login",
+        resetVoiceEnrollment: "Reset Voice Enrollment",
       },
     },
     // Language toggle
@@ -74,6 +78,8 @@ export const LOGIN_STRINGS = {
       sunHeaderSubtitle: "Voice-first banking, made human.",
       scrollHint: "Scroll to explore more",
       scrollDown: "Scroll down",
+      useRandomCredentials: "Use Random Demo Credentials",
+      otpFixedHint: "OTP is fixed: 12345",
     },
     // Hero section
     hero: {
@@ -224,6 +230,10 @@ export const LOGIN_STRINGS = {
       },
       errors: {
         noVoiceSample: "कृपया आगे बढ़ने से पहले अपना आवाज़ का नमूना कैप्चर और पुष्टि करें। (यदि यह आपका पहली बार वॉइस लॉगिन के लिए पंजीकरण है, तो पासफ़्रेज़ को दो बार रिकॉर्ड करें।)",
+        voiceMismatch: "आवाज़ का नमूना हमारे रिकॉर्ड से मेल नहीं खाता।",
+        voiceMismatchHelp: "आप अपने पासवर्ड से लॉग इन करने का प्रयास कर सकते हैं, या नया आवाज़ नमूना रिकॉर्ड करने के लिए अपना आवाज़ पंजीकरण रीसेट कर सकते हैं।",
+        switchToPassword: "पासवर्ड लॉगिन पर स्विच करें",
+        resetVoiceEnrollment: "आवाज़ पंजीकरण रीसेट करें",
       },
     },
     // Language toggle
@@ -256,6 +266,8 @@ export const LOGIN_STRINGS = {
       sunHeaderSubtitle: "आवाज़-पहली बैंकिंग, मानवीय बनाई गई।",
       scrollHint: "और जानकारी देखने के लिए नीचे स्क्रॉल करें",
       scrollDown: "नीचे स्क्रॉल करें",
+      useRandomCredentials: "यादृच्छिक डेमो क्रेडेंशियल उपयोग करें",
+      otpFixedHint: "OTP निश्चित है: 12345",
     },
     // Hero section
     hero: {

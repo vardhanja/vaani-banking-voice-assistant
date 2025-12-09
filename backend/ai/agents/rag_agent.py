@@ -359,9 +359,6 @@ def _detect_query_signals(user_query: str, conversation_context: str = "") -> Qu
         "कौन से ऋण",
         "कौन सी ऋण",
         "कौन सा ऋण",
-        # Note: "लोन के बारे में" and "ऋण के बारे में" are removed from general queries
-        # because they match specific queries like "home loan ke baare mein" or "होम लोन के बारे में"
-        # Only match if it's just "लोन" or "ऋण" without a specific type before "के बारे में"
         "उधार के बारे में",
         "कर्ज के बारे में",
         "मुझे लोन चाहिए",
@@ -622,6 +619,33 @@ def _detect_query_signals(user_query: str, conversation_context: str = "") -> Qu
                         )
                         break
 
+    # Additional heuristic: treat completely generic loan info queries as general when no specific type detected
+    if not detected_loan_type and not is_general_loan_query:
+        generic_loan_information_phrases = [
+            "loan ke baare",
+            "loan ke bare",
+            "about loan",
+            "loan information",
+            "loan info",
+            "loan details",
+            "loan bataiye",
+            "loan batao",
+            "मुझे लोन के बारे में",
+            "लोन के बारे में बताइए",
+            "ऋण के बारे में",
+            "ऋण की जानकारी",
+            "कर्ज के बारे में",
+            "कर्ज की जानकारी",
+            "उधार की जानकारी",
+        ]
+        if any(phrase in query_lower for phrase in generic_loan_information_phrases):
+            is_general_loan_query = True
+            logger.info(
+                "generic_loan_query_detected_without_specific_type",
+                query=user_query,
+                heuristic="loan_information_phrases"
+            )
+
     # CRITICAL: Check if this is a general investment query FIRST
     # If it's a general query, don't use conversation context to detect investment types
     # This prevents showing previous investment/loan details when user asks for investment list again
@@ -661,6 +685,31 @@ def _detect_query_signals(user_query: str, conversation_context: str = "") -> Qu
                     context=conversation_context[:100]
                 )
                 break
+
+    if not detected_investment_type and not is_general_investment_query:
+        generic_investment_information_phrases = [
+            "investment ke baare",
+            "investment ke bare",
+            "about investment",
+            "investment information",
+            "investment info",
+            "investment options",
+            "investment details",
+            "investment batao",
+            "investment bataiye",
+            "निवेश के बारे में",
+            "निवेश जानकारी",
+            "योजना के बारे में",
+            "स्कीम के बारे में",
+            "निवेश विकल्प",
+        ]
+        if any(phrase in query_lower for phrase in generic_investment_information_phrases):
+            is_general_investment_query = True
+            logger.info(
+                "generic_investment_query_detected_without_specific_type",
+                query=user_query,
+                heuristic="investment_information_phrases"
+            )
 
     # Check if it's a general loan query (only if no specific loan type was detected)
     # Use the pre-computed is_general_loan_query value

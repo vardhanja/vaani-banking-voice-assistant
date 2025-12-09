@@ -180,7 +180,7 @@ async def login_v1(
         "device_verification_required": "Verify this device to continue.",
         "voice_verification_required": "Please complete voice verification to continue.",
         "voice_enrollment_required": "Please enroll your voice signature to continue.",
-        "voice_mismatch": "Voice sample did not match our records.",
+        "voice_mismatch": "Voice sample did not match our records. You can try logging in with your password instead, or reset your voice enrollment to record a new voice sample.",
         "voice_sample_invalid": "Voice sample was too short or unclear. Please record again.",
         "validated": "Credentials validated successfully.",
     }
