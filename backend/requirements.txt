@@ -1,6 +1,6 @@
 # Full project dependencies for local development
 # This file includes ALL dependencies for Backend, AI Backend, and shared components
-# For Vercel deployment, use requirements-backend.txt instead
+# For lightweight backend-only deployments, see `requirements-backend.txt`
 
 # Core FastAPI and server
 fastapi>=0.115.0
@@ -28,7 +28,7 @@ resemblyzer>=0.1.2
 librosa>=0.10
 soundfile>=0.12
 
-# AI/ML dependencies (for AI backend - not needed for Vercel backend deployment)
+# AI/ML dependencies (for AI backend - not needed for lightweight backend-only deployments)
 langchain>=0.3.0
 langchain-community>=0.3.0
 langgraph>=0.2.0

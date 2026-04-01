@@ -334,8 +334,8 @@ class GuardrailService:
     def _load_pii_patterns(self) -> Dict[str, re.Pattern]:
         """Load PII detection patterns for Indian context"""
         return {
-            # Aadhaar: 12 digits, optionally space-separated
-            "aadhaar": re.compile(r'\b\d{4}\s?\d{4}\s?\d{4}\b'),
+            # Aadhaar: 12 digits, optionally space or dash separated
+            "aadhaar": re.compile(r'\b\d{4}[-\s]?\d{4}[-\s]?\d{4}\b'),
             
             # PAN: 5 letters + 4 digits + 1 letter (e.g., ABCDE1234F)
             "pan": re.compile(r'\b[A-Z]{5}\d{4}[A-Z]\b'),
@@ -352,8 +352,8 @@ class GuardrailService:
             # Indian phone numbers: 10 digits starting with 6-9
             "phone": re.compile(r'\b[6-9]\d{9}\b'),
             
-            # Credit/Debit card: 16 digits (optionally space-separated)
-            "card_number": re.compile(r'\b\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\b'),
+            # Credit/Debit card: 16 digits (optionally space or dash separated)
+            "card_number": re.compile(r'\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b'),
             
             # IFSC code: 11 characters (4 letters + 0 + 6 alphanumeric)
             "ifsc": re.compile(r'\b[A-Z]{4}0[A-Z0-9]{6}\b'),

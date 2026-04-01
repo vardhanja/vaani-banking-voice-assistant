@@ -63,6 +63,14 @@ from .security import CurrentSessionDep, RequestContext, RequestContextDep
 router = APIRouter(prefix="/api/v1", tags=["Sun National Bank"])
 
 
+@router.get("/health", status_code=status.HTTP_200_OK, tags=["Health"])
+def health_check():
+    """Health check endpoint."""
+    return {"status": "ok"}
+
+
+
+
 def build_meta(ctx: RequestContext) -> ResponseMeta:
     return ResponseMeta(
         requestId=ctx.request_id,

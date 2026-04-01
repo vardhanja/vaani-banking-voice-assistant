@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import PropTypes from "prop-types";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 
 import SunHeader from "../components/SunHeader.jsx";
 import LanguageDropdown from "../components/LanguageDropdown.jsx";
 import AIAssistantLogo from "../components/AIAssistantLogo.jsx";
 import { getLoginStrings, getVoicePhrase } from "../config/loginStrings.js";
 import { getPreferredLanguage, setPreferredLanguage } from "../utils/preferences.js";
+import { getRandomDemoUser } from "../utils/demoUsers.js";
 
 const verifyPasswordLocally = (inputPassword) => inputPassword.trim().length >= 4;
 
@@ -79,6 +80,7 @@ const FIXED_OTP = "12345";
 const SUPPORTED_LOGIN_LANGUAGES = ["en-IN", "hi-IN"];
 
 const Login = ({ onAuthenticate, authenticated }) => {
+  const navigate = useNavigate();
   // Language state - default to user's preferred language or English
   const [loginLanguage, setLoginLanguage] = useState(() => {
     const preferred = getPreferredLanguage();
@@ -506,6 +508,41 @@ const Login = ({ onAuthenticate, authenticated }) => {
     setError("");
   };
 
+  const handleSwitchToPassword = () => {
+    setAuthMode("password");
+    setError("");
+    resetVoiceCapture(1);
+    // Clear voice verification state
+    setIsVerifyingVoice(false);
+    setRecordingStatus("");
+  };
+
+  const handleResetVoiceEnrollment = () => {
+    // Reset voice enrollment flag in localStorage
+    if (userId.trim()) {
+      try {
+        window.localStorage.removeItem(`voiceEnrolled:${userId.trim()}`);
+      } catch {
+        /* ignore storage */
+      }
+    }
+    setIsVoiceEnrolled(false);
+    resetVoiceCapture(1, true);
+    setError("");
+    setRecordingStatus("");
+  };
+
+  const handleUseRandomCredentials = () => {
+    const randomUser = getRandomDemoUser();
+    setUserId(randomUser.customerNumber);
+    setPassword(randomUser.password);
+    setError("");
+    // Clear voice-related state when filling credentials
+    if (authMode === "voice") {
+      resetVoiceCapture(1);
+    }
+  };
+
   return (
     <div className="app-shell">
       {/* Login Form Section - Moved to Top */}
@@ -516,10 +553,20 @@ const Login = ({ onAuthenticate, authenticated }) => {
             <div className="card-hero">
               <div className="card-hero__header">
                 <h1>{strings.general.welcomeTitle}</h1>
-                <LanguageDropdown
-                  disabled={credentialInputsDisabled || recordingState === "recording"}
-                  onSelect={handleLanguageChange}
-                />
+                <div className="card-hero__controls">
+                  <button
+                    type="button"
+                    className="ai-architecture-btn"
+                    onClick={() => navigate("/arch")}
+                    title="View Architecture"
+                  >
+                    Architecture
+                  </button>
+                  <LanguageDropdown
+                    disabled={credentialInputsDisabled || recordingState === "recording"}
+                    onSelect={handleLanguageChange}
+                  />
+                </div>
               </div>
               <p className="card-hero__subtitle">{strings.general.welcomeSubtitle}</p>
             </div>
@@ -544,19 +591,34 @@ const Login = ({ onAuthenticate, authenticated }) => {
               </div>
             </div>
             <form className="card-form" onSubmit={handleSubmit} noValidate>
-              <label htmlFor="userId">
-                {strings.general.userIdLabel}
-                <input
-                  id="userId"
-                  name="userId"
-                  type="text"
-                  autoComplete="username"
-                  placeholder={strings.general.userIdPlaceholder}
-                  value={userId}
-                  onChange={(event) => setUserId(event.target.value)}
+              <div className="card-form__credentials-header">
+                <label htmlFor="userId">
+                  {strings.general.userIdLabel}
+                  <input
+                    id="userId"
+                    name="userId"
+                    type="text"
+                    autoComplete="username"
+                    placeholder={strings.general.userIdPlaceholder}
+                    value={userId}
+                    onChange={(event) => setUserId(event.target.value)}
+                    disabled={credentialInputsDisabled}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="demo-credentials-btn"
+                  onClick={handleUseRandomCredentials}
                   disabled={credentialInputsDisabled}
-                />
-              </label>
+                  title={strings.general.useRandomCredentials}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                    <path d="M12 3v9m0 0v9m0-9h9m-9 0H3"/>
+                  </svg>
+                  {strings.general.useRandomCredentials}
+                </button>
+              </div>
               {authMode === "password" && (
                 <>
                   <label htmlFor="password" className="input-with-toggle">
@@ -665,31 +727,65 @@ const Login = ({ onAuthenticate, authenticated }) => {
                 </div>
               )}
               {awaitingOtp && (
-                <label htmlFor="otp" className="input-with-toggle">
-                  {strings.general.otpLabel}
-                  <div className="input-with-toggle__wrapper">
-                    <input
-                      id="otp"
-                      name="otp"
-                      type={showOtp ? "text" : "password"}
-                      placeholder={strings.general.otpPlaceholder}
-                      value={otp}
-                      onChange={(event) => setOtp(event.target.value)}
-                      ref={otpInputRef}
-                    />
-                    <button
-                      type="button"
-                      className="input-with-toggle__btn"
-                      onClick={() => setShowOtp((prev) => !prev)}
-                      aria-label={showOtp ? strings.general.hideOtp : strings.general.showOtp}
-                      disabled={otpToggleDisabled}
-                    >
-                      {showOtp ? strings.general.hideOtp : strings.general.showOtp}
-                    </button>
-                  </div>
-                </label>
+                <div className="otp-input-wrapper">
+                  <label htmlFor="otp" className="input-with-toggle">
+                    {strings.general.otpLabel}
+                    <div className="input-with-toggle__wrapper">
+                      <input
+                        id="otp"
+                        name="otp"
+                        type={showOtp ? "text" : "password"}
+                        placeholder={strings.general.otpPlaceholder}
+                        value={otp}
+                        onChange={(event) => setOtp(event.target.value)}
+                        ref={otpInputRef}
+                      />
+                      <button
+                        type="button"
+                        className="input-with-toggle__btn"
+                        onClick={() => setShowOtp((prev) => !prev)}
+                        aria-label={showOtp ? strings.general.hideOtp : strings.general.showOtp}
+                        disabled={otpToggleDisabled}
+                      >
+                        {showOtp ? strings.general.hideOtp : strings.general.showOtp}
+                      </button>
+                    </div>
+                  </label>
+                  <p className="otp-fixed-hint">{strings.general.otpFixedHint}</p>
+                </div>
               )}
-              {error && <div className="form-error">{error}</div>}
+              {error && (
+                <div className="form-error">
+                  <div className="form-error__message">{error}</div>
+                  {authMode === "voice" && 
+                    error.toLowerCase().includes("voice") && 
+                    (error.toLowerCase().includes("did not match") || 
+                     error.toLowerCase().includes("mismatch") ||
+                     error.toLowerCase().includes("not match")) && (
+                    <div className="form-error__actions">
+                      <p className="form-error__help">{strings.voiceLogin.errors.voiceMismatchHelp}</p>
+                      <div className="form-error__buttons">
+                        <button
+                          type="button"
+                          className="secondary-btn secondary-btn--small"
+                          onClick={handleSwitchToPassword}
+                          disabled={isSubmitting || isVerifyingVoice}
+                        >
+                          {strings.voiceLogin.errors.switchToPassword}
+                        </button>
+                        <button
+                          type="button"
+                          className="link-btn link-btn--small"
+                          onClick={handleResetVoiceEnrollment}
+                          disabled={isSubmitting || isVerifyingVoice}
+                        >
+                          {strings.voiceLogin.errors.resetVoiceEnrollment}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="card-form__actions">
                 <button className="primary-btn" type="submit" disabled={isSubmitting || isVerifyingVoice || isValidatingPassword}>
                   {isValidatingPassword
